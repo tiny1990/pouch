@@ -20,12 +20,11 @@ func init() {
 func (suite *PouchPullSuite) SetUpSuite(c *check.C) {
 	SkipIfFalse(c, environment.IsLinux)
 
-	c.Assert(environment.PruneAllImages(apiClient), check.IsNil)
+	environment.PruneAllContainers(apiClient)
 }
 
 // TearDownTest does cleanup work in the end of each test.
 func (suite *PouchPullSuite) TearDownTest(c *check.C) {
-	environment.PruneAllImages(apiClient)
 }
 
 // TestPullWorks tests "pouch pull" work.
@@ -52,6 +51,10 @@ func (suite *PouchPullSuite) TestPullWorks(c *check.C) {
 	// with :1.27.2
 	version := busybox + ":1.27.2"
 	checkPull(version, version)
+
+	// without registry
+	withoutRegistry := "busybox:latest"
+	checkPull(withoutRegistry, latest)
 }
 
 // TestPullInWrongWay pulls in wrong way.

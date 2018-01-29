@@ -3,9 +3,11 @@ package main
 import (
 	"os"
 	"strings"
+	"time"
 
 	"github.com/alibaba/pouch/test/command"
 	"github.com/alibaba/pouch/test/environment"
+
 	"github.com/go-check/check"
 	"github.com/gotestyourself/gotestyourself/icmd"
 )
@@ -21,14 +23,13 @@ func init() {
 func (suite *PouchRunSuite) SetUpSuite(c *check.C) {
 	SkipIfFalse(c, environment.IsLinux)
 
-	c.Assert(environment.PruneAllContainers(apiClient), check.IsNil)
+	environment.PruneAllContainers(apiClient)
 
 	command.PouchRun("pull", busyboxImage).Assert(c, icmd.Success)
 }
 
 // TearDownTest does cleanup work in the end of each test.
 func (suite *PouchRunSuite) TearDownTest(c *check.C) {
-	c.Assert(environment.PruneAllContainers(apiClient), check.IsNil)
 }
 
 // TestRun is to verify the correctness of run container with specified name.
@@ -41,6 +42,7 @@ func (suite *PouchRunSuite) TestRun(c *check.C) {
 	if out := res.Combined(); !strings.Contains(out, name) {
 		c.Fatalf("unexpected output %s: should contains container %s\n", out, name)
 	}
+	command.PouchRun("rm", "-f", name).Assert(c, icmd.Success)
 }
 
 // TestRunPrintHi is to verify run container with executing a command.
@@ -53,6 +55,7 @@ func (suite *PouchRunSuite) TestRunPrintHi(c *check.C) {
 	if out := res.Combined(); !strings.Contains(out, "hi") {
 		c.Fatalf("unexpected output %s expected hi\n", out)
 	}
+	command.PouchRun("rm", "-f", name).Assert(c, icmd.Success)
 }
 
 // TestRunDeviceMapping is to verify --device param when running a container.
@@ -70,6 +73,7 @@ func (suite *PouchRunSuite) TestRunDeviceMapping(c *check.C) {
 	if out := res.Combined(); !strings.Contains(out, testDev) {
 		c.Fatalf("unexpected output %s expected %s\n", out, testDev)
 	}
+	command.PouchRun("rm", "-f", name).Assert(c, icmd.Success)
 }
 
 // TestRunDevicePermissions is to verify --device permissions mode when running a container.
@@ -88,6 +92,7 @@ func (suite *PouchRunSuite) TestRunDevicePermissions(c *check.C) {
 	if out := res.Combined(); !strings.HasPrefix(out, permissions) {
 		c.Fatalf("Output should begin with %s, got %s\n", permissions, out)
 	}
+	command.PouchRun("rm", "-f", name).Assert(c, icmd.Success)
 }
 
 // TestRunDeviceInvalidMode is to verify --device wrong mode when running a container.
@@ -121,6 +126,7 @@ func (suite *PouchRunSuite) TestRunDeviceDirectory(c *check.C) {
 	if out := res.Combined(); !strings.Contains(out, expected) {
 		c.Fatalf("Output should contain %s, got %s\n", expected, out)
 	}
+	command.PouchRun("rm", "-f", name).Assert(c, icmd.Success)
 }
 
 // TestRunWithBadDevice is to verify --device with bad device dir when running a container.
@@ -163,4 +169,66 @@ func (suite *PouchRunSuite) TestRunEnableLxcfs(c *check.C) {
 	if out := res.Combined(); !strings.Contains(out, "524288 kB") {
 		c.Fatalf("upexpected output %s expected %s\n", out, "524288 kB")
 	}
+	command.PouchRun("rm", "-f", name).Assert(c, icmd.Success)
+}
+
+// TestRunRestartPolicyAlways is to verify restart policy always works.
+func (suite *PouchRunSuite) TestRunRestartPolicyAlways(c *check.C) {
+	name := "TestRunRestartPolicyAlways"
+
+	command.PouchRun("run", "--name", name, "-d", "--restart=always", busyboxImage, "sh", "-c", "sleep 2").Assert(c, icmd.Success)
+	time.Sleep(2500 * time.Millisecond)
+
+	res := command.PouchRun("ps")
+	res.Assert(c, icmd.Success)
+
+	if out := res.Combined(); !strings.Contains(out, name) {
+		c.Fatalf("expect container %s to be up: %s\n", name, out)
+	}
+	command.PouchRun("rm", "-f", name).Assert(c, icmd.Success)
+}
+
+// TestRunRestartPolicyNone is to verify restart policy none works.
+func (suite *PouchRunSuite) TestRunRestartPolicyNone(c *check.C) {
+	name := "TestRunRestartPolicyNone"
+
+	command.PouchRun("run", "--name", name, "-d", "--restart=no", busyboxImage, "sh", "-c", "sleep 1").Assert(c, icmd.Success)
+	time.Sleep(2000 * time.Millisecond)
+
+	res := command.PouchRun("ps")
+	res.Assert(c, icmd.Success)
+
+	if out := res.Combined(); strings.Contains(out, name) {
+		c.Fatalf("expect container %s to be exited: %s\n", name, out)
+	}
+	command.PouchRun("rm", "-f", name).Assert(c, icmd.Success)
+}
+
+// TestRunWithIPCMode is to verify --specific IPC mode when running a container.
+// TODO: test container ipc namespace mode.
+func (suite *PouchRunSuite) TestRunWithIPCMode(c *check.C) {
+	name := "test-run-with-ipc-mode"
+
+	res := command.PouchRun("run", "--name", name, "--ipc", "host", busyboxImage)
+	res.Assert(c, icmd.Success)
+	command.PouchRun("rm", "-f", name).Assert(c, icmd.Success)
+}
+
+// TestRunWithPIDMode is to verify --specific PID mode when running a container.
+// TODO: test container pid namespace mode.
+func (suite *PouchRunSuite) TestRunWithPIDMode(c *check.C) {
+	name := "test-run-with-pid-mode"
+
+	res := command.PouchRun("run", "--name", name, "--pid", "host", busyboxImage)
+	res.Assert(c, icmd.Success)
+	command.PouchRun("rm", "-f", name).Assert(c, icmd.Success)
+}
+
+// TestRunWithUTSMode is to verify --specific UTS mode when running a container.
+func (suite *PouchRunSuite) TestRunWithUTSMode(c *check.C) {
+	name := "test-run-with-uts-mode"
+
+	res := command.PouchRun("run", "--name", name, "--uts", "host", busyboxImage)
+	res.Assert(c, icmd.Success)
+	command.PouchRun("rm", "-f", name).Assert(c, icmd.Success)
 }

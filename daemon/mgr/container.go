@@ -163,7 +163,7 @@ func (mgr *ContainerManager) Remove(ctx context.Context, name string, option *Co
 	c.Lock()
 	defer c.Unlock()
 
-	if !c.IsStopped() && !c.IsCreated() && !option.Force {
+	if !c.IsStopped() && !c.IsExited() && !c.IsCreated() && !option.Force {
 		return fmt.Errorf("container: %s is not stopped, can't remove it without flag force", c.ID())
 	}
 
@@ -323,7 +323,11 @@ func (mgr *ContainerManager) Create(ctx context.Context, name string, config *ty
 
 	// merge image's config into container's meta
 	if err := meta.merge(func() (v1.ImageConfig, error) {
-		return mgr.Client.GetImageConfig(ctx, config.Image)
+		ociimage, err := mgr.Client.GetOciImage(ctx, config.Image)
+		if err != nil {
+			return ociimage.Config, err
+		}
+		return ociimage.Config, nil
 	}); err != nil {
 		return nil, err
 	}
@@ -372,9 +376,15 @@ func (mgr *ContainerManager) Start(ctx context.Context, id, detachKeys string) (
 	if err != nil {
 		return errors.Wrapf(err, "failed to generate spec: %s", c.ID())
 	}
+	sw := &SpecWrapper{
+		s:      s,
+		ctrMgr: mgr,
+		volMgr: mgr.VolumeMgr,
+		netMgr: mgr.NetworkMgr,
+	}
 
 	for _, setup := range SetupFuncs() {
-		if err = setup(ctx, c.meta, s); err != nil {
+		if err = setup(ctx, c.meta, sw); err != nil {
 			return err
 		}
 	}
@@ -612,9 +622,15 @@ func (mgr *ContainerManager) openIO(id string, attach *AttachConfig, exec bool) 
 	}
 
 	if attach != nil {
-		options = append(options, containerio.WithHijack(attach.Hijack, attach.Upgrade))
-		if attach.Stdin {
-			options = append(options, containerio.WithStdinHijack())
+		if attach.Hijack != nil {
+			// Attaching using http.
+			options = append(options, containerio.WithHijack(attach.Hijack, attach.Upgrade))
+			if attach.Stdin {
+				options = append(options, containerio.WithStdinHijack())
+			}
+		} else if attach.MemBuffer != nil {
+			// Attaching using memory buffer.
+			options = append(options, containerio.WithMemBuffer(attach.MemBuffer))
 		}
 	} else if !exec {
 		options = append(options, containerio.WithRawFile())

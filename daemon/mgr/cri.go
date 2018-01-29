@@ -482,7 +482,35 @@ func (c *CriManager) UpdateContainerResources(ctx context.Context, r *runtime.Up
 // ExecSync executes a command in the container, and returns the stdout output.
 // If command exits with a non-zero exit code, an error is returned.
 func (c *CriManager) ExecSync(ctx context.Context, r *runtime.ExecSyncRequest) (*runtime.ExecSyncResponse, error) {
-	return nil, fmt.Errorf("ExecSync Not Implemented Yet")
+	// TODO: handle timeout.
+	id := r.GetContainerId()
+
+	createConfig := &apitypes.ExecCreateConfig{
+		Cmd: r.GetCmd(),
+	}
+
+	execid, err := c.ContainerMgr.CreateExec(ctx, id, createConfig)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create exec for container %q: %v", id, err)
+	}
+
+	var output bytes.Buffer
+	startConfig := &apitypes.ExecStartConfig{}
+	attachConfig := &AttachConfig{
+		Stdout:    true,
+		Stderr:    true,
+		MemBuffer: &output,
+	}
+
+	err = c.ContainerMgr.StartExec(ctx, execid, startConfig, attachConfig)
+	if err != nil {
+		return nil, fmt.Errorf("failed to start exec for container %q: %v", id, err)
+	}
+
+	return &runtime.ExecSyncResponse{
+		// TODO: seperate stdout and stderr, what about exit code?
+		Stdout: output.Bytes(),
+	}, nil
 }
 
 // Exec prepares a streaming endpoint to execute a command in the container, and returns the address.
@@ -550,9 +578,16 @@ func (c *CriManager) ListImages(ctx context.Context, r *runtime.ListImagesReques
 // ImageStatus returns the status of the image, returns nil if the image isn't present.
 func (c *CriManager) ImageStatus(ctx context.Context, r *runtime.ImageStatusRequest) (*runtime.ImageStatusResponse, error) {
 	imageRef := r.GetImage().GetImage()
-	imageInfo, err := c.ImageMgr.GetImage(ctx, imageRef)
+	ref, err := reference.Parse(imageRef)
 	if err != nil {
 		return nil, err
+	}
+
+	imageInfo, err := c.ImageMgr.GetImage(ctx, ref.String())
+	if err != nil {
+		// TODO: seperate ErrImageNotFound with others.
+		// Now we just return empty if the error occured.
+		return &runtime.ImageStatusResponse{}, nil
 	}
 
 	image, err := imageToCriImage(imageInfo)
@@ -577,7 +612,7 @@ func (c *CriManager) PullImage(ctx context.Context, r *runtime.PullImageRequest)
 		return nil, err
 	}
 
-	imageInfo, err := c.ImageMgr.GetImage(ctx, imageRef)
+	imageInfo, err := c.ImageMgr.GetImage(ctx, ref.String())
 	if err != nil {
 		return nil, err
 	}
@@ -588,9 +623,16 @@ func (c *CriManager) PullImage(ctx context.Context, r *runtime.PullImageRequest)
 // RemoveImage removes the image.
 func (c *CriManager) RemoveImage(ctx context.Context, r *runtime.RemoveImageRequest) (*runtime.RemoveImageResponse, error) {
 	imageRef := r.GetImage().GetImage()
-	imageInfo, err := c.ImageMgr.GetImage(ctx, imageRef)
+	ref, err := reference.Parse(imageRef)
 	if err != nil {
 		return nil, err
+	}
+
+	imageInfo, err := c.ImageMgr.GetImage(ctx, ref.String())
+	if err != nil {
+		// TODO: seperate ErrImageNotFound with others.
+		// Now we just return empty if the error occured.
+		return &runtime.RemoveImageResponse{}, nil
 	}
 
 	err = c.ImageMgr.RemoveImage(ctx, imageInfo, &ImageRemoveOption{})

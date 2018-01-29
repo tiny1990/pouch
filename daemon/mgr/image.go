@@ -44,7 +44,6 @@ type ImageManager struct {
 	// DefaultRegistry is the default registry of daemon.
 	// When users do not specify image repo in image name,
 	// daemon will automatically pull images from DefaultRegistry.
-	// TODO: make DefaultRegistry can be reloaded.
 	DefaultRegistry string
 
 	// client is a pointer to the containerd client.
@@ -57,8 +56,11 @@ type ImageManager struct {
 
 // NewImageManager initializes a brand new image manager.
 func NewImageManager(cfg *config.Config, client *ctrd.Client) (*ImageManager, error) {
+	if !strings.HasSuffix(cfg.DefaultRegistry, "/") {
+		cfg.DefaultRegistry += "/"
+	}
 	mgr := &ImageManager{
-		DefaultRegistry: "docker.io",
+		DefaultRegistry: cfg.DefaultRegistry,
 		client:          client,
 		cache:           newImageCache(),
 	}
@@ -83,6 +85,7 @@ func (mgr *ImageManager) PullImage(pctx context.Context, image, tag string, out 
 		close(wait)
 	}()
 
+	image = mgr.addRegistry(image)
 	img, err := mgr.client.PullImage(ctx, image+":"+tag, stream)
 
 	// wait goroutine to exit.
@@ -92,13 +95,7 @@ func (mgr *ImageManager) PullImage(pctx context.Context, image, tag string, out 
 		return err
 	}
 
-	// FIXME need to refactor it and the image's list interface.
-	mgr.cache.put(&types.ImageInfo{
-		Name:   img.Name(),
-		ID:     strings.TrimPrefix(string(img.Target().Digest), "sha256:")[:12],
-		Digest: string(img.Target().Digest),
-		Size:   img.Target().Size,
-	})
+	mgr.cache.put(&img)
 
 	return nil
 }
@@ -125,6 +122,7 @@ func (mgr *ImageManager) SearchImages(ctx context.Context, name string, registry
 
 // GetImage gets image by image id or ref.
 func (mgr *ImageManager) GetImage(ctx context.Context, idOrRef string) (*types.ImageInfo, error) {
+	idOrRef = mgr.addRegistry(idOrRef)
 	return mgr.cache.get(idOrRef)
 }
 
@@ -171,7 +169,7 @@ func (c *imageCache) put(image *types.ImageInfo) {
 	c.Lock()
 	defer c.Unlock()
 
-	id := strings.TrimPrefix(image.Digest, "sha256:")
+	id := strings.TrimPrefix(image.ID, "sha256:")
 	ref := image.Name
 
 	c.refs[ref] = image
@@ -214,7 +212,7 @@ func (c *imageCache) remove(image *types.ImageInfo) {
 	c.Lock()
 	defer c.Unlock()
 
-	id := strings.TrimPrefix(image.Digest, "sha256:")
+	id := strings.TrimPrefix(image.ID, "sha256:")
 	ref := image.Name
 
 	delete(c.refs, ref)

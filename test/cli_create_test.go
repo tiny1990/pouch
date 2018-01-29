@@ -22,14 +22,13 @@ func init() {
 func (suite *PouchCreateSuite) SetUpSuite(c *check.C) {
 	SkipIfFalse(c, environment.IsLinux)
 
-	c.Assert(environment.PruneAllContainers(apiClient), check.IsNil)
+	environment.PruneAllContainers(apiClient)
 
 	command.PouchRun("pull", busyboxImage).Assert(c, icmd.Success)
 }
 
 // TearDownTest does cleanup work in the end of each test.
 func (suite *PouchCreateSuite) TearDownTest(c *check.C) {
-	c.Assert(environment.PruneAllContainers(apiClient), check.IsNil)
 }
 
 // TestCreateName is to verify the correctness of creating contaier with specified name.

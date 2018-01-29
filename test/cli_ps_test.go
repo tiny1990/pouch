@@ -21,13 +21,12 @@ func init() {
 func (suite *PouchPsSuite) SetUpSuite(c *check.C) {
 	SkipIfFalse(c, environment.IsLinux)
 
-	c.Assert(environment.PruneAllContainers(apiClient), check.IsNil)
+	environment.PruneAllContainers(apiClient)
 	command.PouchRun("pull", busyboxImage).Assert(c, icmd.Success)
 }
 
 // TearDownTest does cleanup work in the end of each test.
 func (suite *PouchPsSuite) TearDownTest(c *check.C) {
-	environment.PruneAllContainers(apiClient)
 }
 
 // TestPsWorks tests "pouch ps" work.
