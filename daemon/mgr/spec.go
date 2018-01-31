@@ -49,6 +49,11 @@ var setupFunc = []SetupFunc{
 
 	// host device spec
 	setupDevices,
+
+	// linux-platform-specifc spec
+	setupSysctl,
+	// blkio spec
+	setupBlkio,
 }
 
 // Register is used to registe spec setup function.
