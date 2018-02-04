@@ -812,6 +812,31 @@ GET /info
 |**500**|An unexpected server error occured.|[Error](#error)|
 
 
+<a name="networklist"></a>
+### List networks
+```
+GET /networks
+```
+
+
+#### Responses
+
+|HTTP Code|Description|Schema|
+|---|---|---|
+|**200**|Summary networks that matches the query|[NetworkListResp](#networklistresp)|
+|**500**|An unexpected server error occured.|[Error](#error)|
+
+
+#### Produces
+
+* `application/json`
+
+
+#### Tags
+
+* Network
+
+
 <a name="networkcreate"></a>
 ### Create a network
 ```
@@ -832,6 +857,7 @@ POST /networks/create
 |---|---|---|
 |**201**|The network was created successfully|[NetworkCreateResp](#networkcreateresp)|
 |**400**|bad parameter|[Error](#error)|
+|**409**|name already in use|[Error](#error)|
 |**500**|An unexpected server error occured.|[Error](#error)|
 
 
@@ -1277,6 +1303,18 @@ A device mapping between the host and container
 |**PathOnHost**  <br>*optional*|path on host of the device mapping|string|
 
 
+<a name="endpointipamconfig"></a>
+### EndpointIPAMConfig
+IPAM configurations for the endpoint
+
+
+|Name|Description|Schema|
+|---|---|---|
+|**IPv4Address**  <br>*optional*|ipv4 address|string|
+|**IPv6Address**  <br>*optional*|ipv6 address|string|
+|**LinkLocalIPs**  <br>*optional*|link to the list of local ip|< string > array|
+
+
 <a name="endpointsettings"></a>
 ### EndpointSettings
 Configuration for a network endpoint.
@@ -1290,6 +1328,7 @@ Configuration for a network endpoint.
 |**Gateway**  <br>*optional*|Gateway address for this network.  <br>**Example** : `"172.17.0.1"`|string|
 |**GlobalIPv6Address**  <br>*optional*|Global IPv6 address.  <br>**Example** : `"2001:db8::5689"`|string|
 |**GlobalIPv6PrefixLen**  <br>*optional*|Mask length of the global IPv6 address.  <br>**Example** : `64`|integer (int64)|
+|**IPAMConfig**  <br>*optional*||[EndpointIPAMConfig](#endpointipamconfig)|
 |**IPAddress**  <br>*optional*|IPv4 address.  <br>**Example** : `"172.17.0.4"`|string|
 |**IPPrefixLen**  <br>*optional*|Mask length of the IPv4 address.  <br>**Example** : `16`|integer|
 |**IPv6Gateway**  <br>*optional*|IPv6 gateway address.  <br>**Example** : `"2001:db8:2::100"`|string|
@@ -1366,7 +1405,7 @@ Container configuration that depends on the host we are running on
 |**BlkioDeviceWriteBps**  <br>*optional*|Limit write rate (bytes per second) to a device, in the form `[{"Path": "device_path", "Rate": rate}]`.|< [ThrottleDevice](#throttledevice) > array|
 |**BlkioDeviceWriteIOps**  <br>*optional*|Limit write rate (IO per second) to a device, in the form `[{"Path": "device_path", "Rate": rate}]`.|< [ThrottleDevice](#throttledevice) > array|
 |**BlkioWeight**  <br>*optional*|Block IO weight (relative weight).  <br>**Minimum value** : `0`  <br>**Maximum value** : `1000`|integer (uint16)|
-|**BlkioWeightDevice**  <br>*optional*|Block IO weight (relative device weight) in the form `[{"Path": "device_path", "Weight": weight}]`.|< [BlkioWeightDevice](#hostconfig-blkioweightdevice) > array|
+|**BlkioWeightDevice**  <br>*optional*|Block IO weight (relative device weight) in the form `[{"Path": "device_path", "Weight": weight}]`.|< [WeightDevice](#weightdevice) > array|
 |**CapAdd**  <br>*optional*|A list of kernel capabilities to add to the container.|< string > array|
 |**CapDrop**  <br>*optional*|A list of kernel capabilities to drop from the container.|< string > array|
 |**Cgroup**  <br>*optional*|Cgroup to use for the container.|string|
@@ -1424,14 +1463,6 @@ Container configuration that depends on the host we are running on
 |**UsernsMode**  <br>*optional*|Sets the usernamespace mode for the container when usernamespace remapping option is enabled.|string|
 |**VolumeDriver**  <br>*optional*|Driver that this container uses to mount volumes.|string|
 |**VolumesFrom**  <br>*optional*|A list of volumes to inherit from another container, specified in the form `<container name>[:<ro\|rw>]`.|< string > array|
-
-<a name="hostconfig-blkioweightdevice"></a>
-**BlkioWeightDevice**
-
-|Name|Description|Schema|
-|---|---|---|
-|**Path**  <br>*optional*||string|
-|**Weight**  <br>*optional*|**Minimum value** : `0`|integer (uint16)|
 
 <a name="hostconfig-logconfig"></a>
 **LogConfig**
@@ -1494,13 +1525,25 @@ An object containing all details of an image at API side
 
 |Name|Description|Schema|
 |---|---|---|
+|**Architecture**  <br>*optional*|the CPU architecture.|string|
 |**Config**  <br>*optional*||[ContainerConfig](#containerconfig)|
-|**CreatedAt**  <br>*optional*|Time of image creation|string|
+|**CreatedAt**  <br>*optional*|time of image creation.|string|
 |**Digest**  <br>*optional*|digest of image.|string|
 |**ID**  <br>*optional*|ID of an image.|string|
 |**Name**  <br>*optional*|name of an image.|string|
+|**Os**  <br>*optional*|the name of the operating system.|string|
+|**RootFS**  <br>*optional*|the rootfs key references the layer content addresses used by the image.|[RootFS](#imageinfo-rootfs)|
 |**Size**  <br>*optional*|size of image's taking disk space.|integer|
 |**Tag**  <br>*optional*|tag of an image.|string|
+
+<a name="imageinfo-rootfs"></a>
+**RootFS**
+
+|Name|Description|Schema|
+|---|---|---|
+|**BaseLayer**  <br>*optional*|the base layer content hash.|string|
+|**Layers**  <br>*optional*|an array of layer content hashes|< string > array|
+|**Type**  <br>*required*|type of the rootfs|string|
 
 
 <a name="mountpoint"></a>
@@ -1566,6 +1609,19 @@ contains the response for the remote API: POST /networks/create
 |**Warning**  <br>*optional*|Warning means the message of create network result.|string|
 
 
+<a name="networkinfo"></a>
+### NetworkInfo
+NetworkInfo represents the configuration of a network
+
+
+|Name|Description|Schema|
+|---|---|---|
+|**Driver**  <br>*optional*|Driver is the Driver name used to create the network|string|
+|**ID**  <br>*optional*|ID uniquely identifies a network on a single machine|string|
+|**Name**  <br>*optional*|Name is the name of the network.|string|
+|**Scope**  <br>*optional*|Scope describes the level at which the network exists|string|
+
+
 <a name="networkinspectresp"></a>
 ### NetworkInspectResp
 is the expected body of the 'GET networks/{id}'' http request message
@@ -1582,6 +1638,15 @@ is the expected body of the 'GET networks/{id}'' http request message
 |**Name**  <br>*optional*|Name is the requested name of the network|string|
 |**Options**  <br>*optional*|Options holds the network specific options to use for when creating the network.|< string, string > map|
 |**Scope**  <br>*optional*|Scope describes the level at which the network exists.|string|
+
+
+<a name="networklistresp"></a>
+### NetworkListResp
+
+|Name|Description|Schema|
+|---|---|---|
+|**Networks**  <br>*required*|List of networks|< [NetworkInfo](#networkinfo) > array|
+|**Warnings**  <br>*required*|Warnings that occurred when fetching the list of networks|< string > array|
 
 
 <a name="networksettings"></a>
@@ -1607,10 +1672,7 @@ NetworkSettings exposes the network settings in the API.
 ### NetworkingConfig
 Configuration for a network used to create a container.
 
-
-|Name|Schema|
-|---|---|
-|**EndpointsConfig**  <br>*optional*|[EndpointSettings](#endpointsettings)|
+*Type* : object
 
 
 <a name="portbinding"></a>
@@ -1648,7 +1710,7 @@ A container's resources (cgroups config, ulimits, etc)
 |**BlkioDeviceWriteBps**  <br>*optional*|Limit write rate (bytes per second) to a device, in the form `[{"Path": "device_path", "Rate": rate}]`.|< [ThrottleDevice](#throttledevice) > array|
 |**BlkioDeviceWriteIOps**  <br>*optional*|Limit write rate (IO per second) to a device, in the form `[{"Path": "device_path", "Rate": rate}]`.|< [ThrottleDevice](#throttledevice) > array|
 |**BlkioWeight**  <br>*optional*|Block IO weight (relative weight).  <br>**Minimum value** : `0`  <br>**Maximum value** : `1000`|integer (uint16)|
-|**BlkioWeightDevice**  <br>*optional*|Block IO weight (relative device weight) in the form `[{"Path": "device_path", "Weight": weight}]`.|< [BlkioWeightDevice](#resources-blkioweightdevice) > array|
+|**BlkioWeightDevice**  <br>*optional*|Block IO weight (relative device weight) in the form `[{"Path": "device_path", "Weight": weight}]`.|< [WeightDevice](#weightdevice) > array|
 |**CgroupParent**  <br>*optional*|Path to `cgroups` under which the container's `cgroup` is created. If the path is not absolute, the path is considered to be relative to the `cgroups` path of the init process. Cgroups are created if they do not already exist.|string|
 |**CpuCount**  <br>*optional*|The number of usable CPUs (Windows only).<br><br>On Windows Server containers, the processor resource controls are mutually exclusive. The order of precedence is `CPUCount` first, then `CPUShares`, and `CPUPercent` last.|integer (int64)|
 |**CpuPercent**  <br>*optional*|The usable percentage of the available CPUs (Windows only).<br>On Windows Server containers, the processor resource controls are mutually exclusive. The order of precedence is `CPUCount` first, then `CPUShares`, and `CPUPercent` last.|integer (int64)|
@@ -1673,14 +1735,6 @@ A container's resources (cgroups config, ulimits, etc)
 |**OomKillDisable**  <br>*optional*|Disable OOM Killer for the container.|boolean|
 |**PidsLimit**  <br>*optional*|Tune a container's pids limit. Set -1 for unlimited. Only on Linux 4.4 does this paramter support.|integer (int64)|
 |**Ulimits**  <br>*optional*|A list of resource limits to set in the container. For example: `{"Name": "nofile", "Soft": 1024, "Hard": 2048}`"|< [Ulimits](#resources-ulimits) > array|
-
-<a name="resources-blkioweightdevice"></a>
-**BlkioWeightDevice**
-
-|Name|Description|Schema|
-|---|---|---|
-|**Path**  <br>*optional*||string|
-|**Weight**  <br>*optional*|**Minimum value** : `0`|integer (uint16)|
 
 <a name="resources-ulimits"></a>
 **Ulimits**
@@ -1796,6 +1850,17 @@ Volume represents the configuration of a volume for the container.
 |---|---|---|
 |**Volumes**  <br>*required*|List of volumes|< [VolumeInfo](#volumeinfo) > array|
 |**Warnings**  <br>*required*|Warnings that occurred when fetching the list of volumes|< string > array|
+
+
+<a name="weightdevice"></a>
+### WeightDevice
+Weight for BlockIO Device
+
+
+|Name|Description|Schema|
+|---|---|---|
+|**Path**  <br>*optional*|Weight Device|string|
+|**Weight**  <br>*optional*|**Minimum value** : `0`|integer (uint16)|
 
 
 

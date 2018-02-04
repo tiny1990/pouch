@@ -321,6 +321,18 @@ func (mgr *ContainerManager) Create(ctx context.Context, name string, config *ty
 		HostConfig: config.HostConfig,
 	}
 
+	// set network settings
+	meta.NetworkSettings = &types.NetworkSettings{}
+	if len(config.NetworkingConfig.EndpointsConfig) > 0 {
+		meta.NetworkSettings.Networks = config.NetworkingConfig.EndpointsConfig
+	} else {
+		meta.Config.NetworkDisabled = true
+	}
+
+	if err := parseSecurityOpt(meta, config.HostConfig.SecurityOpt); err != nil {
+		return nil, err
+	}
+
 	// merge image's config into container's meta
 	if err := meta.merge(func() (v1.ImageConfig, error) {
 		ociimage, err := mgr.Client.GetOciImage(ctx, config.Image)
@@ -371,6 +383,14 @@ func (mgr *ContainerManager) Start(ctx context.Context, id, detachKeys string) (
 	}
 	c.DetachKeys = detachKeys
 
+	// initialise network endpoint
+	for name, endpointSetting := range c.meta.NetworkSettings.Networks {
+		if _, err := mgr.NetworkMgr.EndpointCreate(ctx, c.ID(), name, c.meta.NetworkSettings, endpointSetting); err != nil {
+			logrus.Errorf("failed to create endpoint: %v", err)
+			return err
+		}
+	}
+
 	// new a default spec.
 	s, err := ctrd.NewDefaultSpec(ctx, c.ID())
 	if err != nil {
@@ -417,7 +437,8 @@ func (mgr *ContainerManager) Start(ctx context.Context, id, detachKeys string) (
 		c.meta.State.FinishedAt = time.Now().UTC().Format(utils.TimeLayout)
 		c.meta.State.Error = err.Error()
 		c.meta.State.Pid = 0
-		//TODO get and set exit code
+		//TODO: make exit code more correct.
+		c.meta.State.ExitCode = 127
 
 		// release io
 		io.Close()
