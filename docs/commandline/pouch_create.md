@@ -22,6 +22,8 @@ container ID: e1d541722d68dc5d133cca9e7bd8fd9338603e1763096c8e853522b60d11f7b9, 
 ```
       --blkio-weight uint16         Block IO (relative weight), between 10 and 1000, or 0 to disable
       --blkio-weight-device value   Block IO weight (relative device weight) (default [])
+      --cap-add strings             Add Linux capabilities
+      --cap-drop strings            Drop Linux capabilities
       --cpu-share int               CPU shares
       --cpuset-cpus string          CPUs in cpuset
       --cpuset-mems string          MEMs in cpuset
@@ -43,6 +45,7 @@ container ID: e1d541722d68dc5d133cca9e7bd8fd9338603e1763096c8e853522b60d11f7b9, 
       --name string                 Specify name of container
       --net strings                 Set networks to container
       --pid string                  PID namespace to use
+      --privileged                  Give extended privileges to the container
       --restart string              Restart policy to apply when container exits
       --runtime string              Specify oci runtime
       --security-opt strings        Security Options

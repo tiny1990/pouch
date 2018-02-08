@@ -6,8 +6,6 @@ import (
 	"os"
 	"strings"
 
-	"github.com/alibaba/pouch/pkg/reference"
-
 	"github.com/spf13/cobra"
 )
 
@@ -66,6 +64,7 @@ func (rc *RunCommand) addFlags() {
 	flagSet.StringVar(&rc.memorySwap, "memory-swap", "", "Container swap limit")
 	flagSet.StringSliceVarP(&rc.devices, "device", "", nil, "Add a host device to the container")
 	flagSet.BoolVar(&rc.enableLxcfs, "enableLxcfs", false, "Enable lxcfs")
+	flagSet.BoolVar(&rc.privileged, "privileged", false, "Give extended privileges to the container")
 	flagSet.StringVar(&rc.restartPolicy, "restart", "", "Restart policy to apply when container exits")
 	flagSet.StringVar(&rc.ipcMode, "ipc", "", "IPC namespace to use")
 	flagSet.StringVar(&rc.pidMode, "pid", "", "PID namespace to use")
@@ -90,12 +89,7 @@ func (rc *RunCommand) runRun(args []string) error {
 		return fmt.Errorf("failed to run container: %v", err)
 	}
 
-	ref, err := reference.Parse(args[0])
-	if err != nil {
-		return fmt.Errorf("failed to run container: %v", err)
-	}
-
-	config.Image = ref.String()
+	config.Image = args[0]
 	if len(args) > 1 {
 		config.Cmd = args[1:]
 	}

@@ -43,7 +43,7 @@ func generateEnvList(envs []*runtime.KeyValue) (result []string) {
 	for _, env := range envs {
 		result = append(result, fmt.Sprintf("%s=%s", env.Key, env.Value))
 	}
-	return
+	return result
 }
 
 func makeLabels(labels, annotations map[string]string) map[string]string {
@@ -292,6 +292,27 @@ func getAppArmorSecurityOpts(sc *runtime.LinuxContainerSecurityContext) ([]strin
 	return []string{fmt.Sprintf("apparmor=%s", profile)}, nil
 }
 
+// getSeccompSecurityOpts get container seccomp options from container seccomp profiles.
+func getSeccompSecurityOpts(sc *runtime.LinuxContainerSecurityContext) ([]string, error) {
+	profile := sc.SeccompProfilePath
+	if profile == "" || profile == ProfileNameUnconfined {
+		return []string{fmt.Sprintf("seccomp=%s", ProfileNameUnconfined)}, nil
+	}
+
+	// Return unconfined profile explicitly.
+	if profile == ProfileDockerDefault {
+		// return nil so pouch will load the default seccomp profile.
+		return nil, nil
+	}
+
+	if !strings.HasPrefix(profile, ProfileNamePrefix) {
+		return nil, fmt.Errorf("undefault profile should prefix with %q", ProfileNamePrefix)
+	}
+	profile = strings.TrimPrefix(profile, ProfileNamePrefix)
+
+	return []string{fmt.Sprintf("seccomp=%s", profile)}, nil
+}
+
 // modifyHostConfig applies security context config to pouch's HostConfig.
 func modifyHostConfig(sc *runtime.LinuxContainerSecurityContext, hostConfig *apitypes.HostConfig) error {
 	if sc == nil {
@@ -301,10 +322,18 @@ func modifyHostConfig(sc *runtime.LinuxContainerSecurityContext, hostConfig *api
 	// TODO: apply other security options.
 
 	// Apply capability options.
+	hostConfig.Privileged = sc.Privileged
 	if sc.GetCapabilities() != nil {
 		hostConfig.CapAdd = sc.GetCapabilities().GetAddCapabilities()
 		hostConfig.CapDrop = sc.GetCapabilities().GetDropCapabilities()
 	}
+
+	// Apply seccomp options.
+	seccompSecurityOpts, err := getSeccompSecurityOpts(sc)
+	if err != nil {
+		return fmt.Errorf("failed to generate seccomp security options: %v", err)
+	}
+	hostConfig.SecurityOpt = append(hostConfig.SecurityOpt, seccompSecurityOpts...)
 
 	// Apply appArmor options.
 	appArmorSecurityOpts, err := getAppArmorSecurityOpts(sc)
@@ -418,10 +447,11 @@ func filterCRIContainers(containers []*runtime.Container, filter *runtime.Contai
 
 // imageToCriImage converts pouch image API to CRI image API.
 func imageToCriImage(image *apitypes.ImageInfo) (*runtime.Image, error) {
-	ref, err := reference.Parse(image.Name)
+	namedRef, err := reference.ParseNamedReference(image.Name)
 	if err != nil {
 		return nil, err
 	}
+	taggedRef := reference.WithDefaultTagIfMissing(namedRef).(reference.Tagged)
 
 	uid := &runtime.Int64Value{}
 	imageUID, username := getUserFromImageUser(image.Config.User)
@@ -432,9 +462,9 @@ func imageToCriImage(image *apitypes.ImageInfo) (*runtime.Image, error) {
 	size := uint64(image.Size)
 	// TODO: improve type ImageInfo to include RepoTags and RepoDigests.
 	return &runtime.Image{
-		Id:          image.ID,
-		RepoTags:    []string{fmt.Sprintf("%s:%s", ref.Name, ref.Tag)},
-		RepoDigests: []string{fmt.Sprintf("%s@%s", ref.Name, image.Digest)},
+		Id:          image.Digest,
+		RepoTags:    []string{taggedRef.String()},
+		RepoDigests: []string{fmt.Sprintf("%s@%s", taggedRef.Name(), image.Digest)},
 		Size_:       size,
 		Uid:         uid,
 		Username:    username,
@@ -449,12 +479,13 @@ func (c *CriManager) ensureSandboxImageExists(ctx context.Context, image string)
 		return nil
 	}
 
-	ref, err := reference.Parse(image)
+	namedRef, err := reference.ParseNamedReference(image)
 	if err != nil {
 		return fmt.Errorf("parse image name failed: %v", err)
 	}
+	taggedRef := reference.WithDefaultTagIfMissing(namedRef).(reference.Tagged)
 
-	err = c.ImageMgr.PullImage(ctx, ref.Name, ref.Tag, bytes.NewBuffer([]byte{}))
+	err = c.ImageMgr.PullImage(ctx, taggedRef.Name(), taggedRef.Tag(), bytes.NewBuffer([]byte{}))
 	if err != nil {
 		return fmt.Errorf("pull sandbox image %q failed: %v", image, err)
 	}

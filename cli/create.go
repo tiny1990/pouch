@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/alibaba/pouch/pkg/reference"
 	"github.com/spf13/cobra"
 )
 
@@ -57,6 +56,7 @@ func (cc *CreateCommand) addFlags() {
 	flagSet.StringVar(&cc.memorySwap, "memory-swap", "", "Container swap limit")
 	flagSet.StringSliceVarP(&cc.devices, "device", "", nil, "Add a host device to the container")
 	flagSet.BoolVar(&cc.enableLxcfs, "enableLxcfs", false, "Enable lxcfs")
+	flagSet.BoolVar(&cc.privileged, "privileged", false, "Give extended privileges to the container")
 	flagSet.StringVar(&cc.restartPolicy, "restart", "", "Restart policy to apply when container exits")
 	flagSet.StringVar(&cc.ipcMode, "ipc", "", "IPC namespace to use")
 	flagSet.StringVar(&cc.pidMode, "pid", "", "PID namespace to use")
@@ -81,12 +81,7 @@ func (cc *CreateCommand) runCreate(args []string) error {
 		return fmt.Errorf("failed to create container: %v", err)
 	}
 
-	ref, err := reference.Parse(args[0])
-	if err != nil {
-		return fmt.Errorf("failed to create container: %v", err)
-	}
-	config.Image = ref.String()
-
+	config.Image = args[0]
 	if len(args) > 1 {
 		config.Cmd = args[1:]
 	}

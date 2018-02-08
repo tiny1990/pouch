@@ -266,7 +266,55 @@ func Test_parseDeviceMappings(t *testing.T) {
 		want    []*types.DeviceMapping
 		wantErr bool
 	}{
-	// TODO: Add test cases.
+		{
+			name: "deviceMapping1",
+			args: args{
+				devices: []string{"/dev/deviceName:/dev/deviceName:mrw"},
+			},
+			want: []*types.DeviceMapping{
+				{
+					PathOnHost:        "/dev/deviceName",
+					PathInContainer:   "/dev/deviceName",
+					CgroupPermissions: "mrw",
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "deviceMapping2",
+			args: args{
+				devices: []string{"/dev/deviceName:"},
+			},
+			want: []*types.DeviceMapping{
+				{
+					PathOnHost:        "/dev/deviceName",
+					PathInContainer:   "/dev/deviceName",
+					CgroupPermissions: "rwm",
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "deviceMappingWrong1",
+			args: args{
+				devices: []string{"/dev/deviceName:/dev/deviceName:rrw"},
+			},
+			wantErr: true,
+		},
+		{
+			name: "deviceMappingWrong2",
+			args: args{
+				devices: []string{"/dev/deviceName:/dev/deviceName:arw"},
+			},
+			wantErr: true,
+		},
+		{
+			name: "deviceMappingWrong3",
+			args: args{
+				devices: []string{"/dev/deviceName:/dev/deviceName:mrw:mrw"},
+			},
+			wantErr: true,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -279,5 +327,99 @@ func Test_parseDeviceMappings(t *testing.T) {
 				t.Errorf("parseDeviceMappings() = %v, want %v", got, tt.want)
 			}
 		})
+	}
+}
+
+func Test_parseSysctls(t *testing.T) {
+	type result struct {
+		sysctls map[string]string
+		err     error
+	}
+	type TestCases struct {
+		input  []string
+		expect result
+	}
+
+	testCases := []TestCases{
+		{
+			input: []string{"a=b"},
+			expect: result{
+				sysctls: map[string]string{"a": "b"},
+				err:     nil,
+			},
+		},
+		{
+			input: []string{"ab"},
+			expect: result{
+				sysctls: nil,
+				err:     fmt.Errorf("invalid sysctl: %s: sysctl must be in format of key=value", "ab"),
+			},
+		},
+	}
+
+	for _, testCase := range testCases {
+		sysctl, err := parseSysctls(testCase.input)
+		assert.Equal(t, testCase.expect.sysctls, sysctl)
+		assert.Equal(t, testCase.expect.err, err)
+	}
+}
+
+func Test_parseNetwork(t *testing.T) {
+	type net struct {
+		name string
+		ip   string
+	}
+	type result struct {
+		network net
+		err     error
+	}
+	type TestCases struct {
+		input  string
+		expect result
+	}
+
+	testCases := []TestCases{
+		{
+			input: "",
+			expect: result{
+				err:     fmt.Errorf("invalid network: cannot be empty"),
+				network: net{name: "", ip: ""},
+			},
+		},
+		{
+			input: "121.0.0.1",
+			expect: result{
+				err:     nil,
+				network: net{name: "", ip: "121.0.0.1"},
+			},
+		},
+		{
+			input: "myHost",
+			expect: result{
+				err:     nil,
+				network: net{name: "myHost", ip: ""},
+			},
+		},
+		{
+			input: "myHost:121.0.0.1",
+			expect: result{
+				err:     nil,
+				network: net{name: "myHost", ip: "121.0.0.1"},
+			},
+		},
+		{
+			input: "myHost:myHost",
+			expect: result{
+				err:     fmt.Errorf("invalid network ip: %s", "myHost"),
+				network: net{name: "", ip: ""},
+			},
+		},
+	}
+
+	for _, testCase := range testCases {
+		name, ip, error := parseNetwork(testCase.input)
+		assert.Equal(t, testCase.expect.err, error)
+		assert.Equal(t, testCase.expect.network.name, name)
+		assert.Equal(t, testCase.expect.network.ip, ip)
 	}
 }

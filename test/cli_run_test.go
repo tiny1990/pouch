@@ -2,6 +2,7 @@ package main
 
 import (
 	"os"
+	"runtime"
 	"strings"
 	"time"
 
@@ -50,6 +51,23 @@ func (suite *PouchRunSuite) TestRunPrintHi(c *check.C) {
 	name := "test-run-print-hi"
 
 	res := command.PouchRun("run", "--name", name, busyboxImage, "echo", "hi")
+	res.Assert(c, icmd.Success)
+
+	if out := res.Combined(); !strings.Contains(out, "hi") {
+		c.Fatalf("unexpected output %s expected hi\n", out)
+	}
+	command.PouchRun("rm", "-f", name).Assert(c, icmd.Success)
+}
+
+// TestRunPrintHiByImageID is to verify run container with executing a command by image ID.
+func (suite *PouchRunSuite) TestRunPrintHiByImageID(c *check.C) {
+	name := "test-run-print-hi-by-image-id"
+
+	res := command.PouchRun("images")
+	res.Assert(c, icmd.Success)
+	imageID := imagesListToKV(res.Combined())[busyboxImage][0]
+
+	res = command.PouchRun("run", "--name", name, imageID, "echo", "hi")
 	res.Assert(c, icmd.Success)
 
 	if out := res.Combined(); !strings.Contains(out, "hi") {
@@ -261,12 +279,34 @@ func (suite *PouchRunSuite) TestRunWithAppArmor(c *check.C) {
 	command.PouchRun("rm", "-f", name).Assert(c, icmd.Success)
 }
 
+// TestRunWithSeccomp is to verify run container with security option seccomp.
+func (suite *PouchRunSuite) TestRunWithSeccomp(c *check.C) {
+	seccomp := "seccomp=unconfined"
+	name := "run-seccomp"
+
+	res := command.PouchRun("run", "--name", name, "--security-opt", seccomp, busyboxImage)
+	res.Assert(c, icmd.Success)
+
+	// TODO: do the test more strictly with effective seccomp profile.
+
+	command.PouchRun("rm", "-f", name).Assert(c, icmd.Success)
+}
+
 // TestRunWithCapability is to verify run container with capability.
 func (suite *PouchRunSuite) TestRunWithCapability(c *check.C) {
 	capability := "NET_ADMIN"
 	name := "run-capability"
 
 	res := command.PouchRun("run", "--name", name, "--cap-add", capability, busyboxImage, "brctl", "addbr", "foobar")
+	res.Assert(c, icmd.Success)
+	command.PouchRun("rm", "-f", name).Assert(c, icmd.Success)
+}
+
+// TestRunWithPrivilege is to verify run container with privilege.
+func (suite *PouchRunSuite) TestRunWithPrivilege(c *check.C) {
+	name := "run-privilege"
+
+	res := command.PouchRun("run", "--name", name, "--privileged", busyboxImage, "brctl", "addbr", "foobar")
 	res.Assert(c, icmd.Success)
 	command.PouchRun("rm", "-f", name).Assert(c, icmd.Success)
 }
@@ -278,4 +318,25 @@ func (suite *PouchRunSuite) TestRunWithBlkioWeight(c *check.C) {
 	res := command.PouchRun("run", "--name", name, "--blkio-weight", "500", busyboxImage)
 	res.Assert(c, icmd.Success)
 	command.PouchRun("rm", "-f", name).Assert(c, icmd.Success)
+}
+
+// TestRunWithLocalVolume is to verify run container with -v volume works.
+func (suite *PouchRunSuite) TestRunWithLocalVolume(c *check.C) {
+	pc, _, _, _ := runtime.Caller(0)
+	tmpname := strings.Split(runtime.FuncForPC(pc).Name(), ".")
+	var funcname string
+	for i := range tmpname {
+		funcname = tmpname[i]
+	}
+
+	name := funcname
+
+	command.PouchRun("volume", "create", "--name", funcname).Assert(c, icmd.Success)
+	command.PouchRun("run", "--name", name, "-v", funcname+":/tmp", busyboxImage, "touch", "/tmp/test").Assert(c, icmd.Success)
+
+	// check the existence of /mnt/local/function/test
+	icmd.RunCommand("stat", "/mnt/local/"+funcname+"/test").Assert(c, icmd.Success)
+
+	command.PouchRun("rm", "-f", name).Assert(c, icmd.Success)
+	command.PouchRun("volume", "remove", funcname).Assert(c, icmd.Success)
 }
