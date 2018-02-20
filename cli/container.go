@@ -22,6 +22,7 @@ type container struct {
 	env                  []string
 	entrypoint           string
 	workdir              string
+	user                 string
 	hostname             string
 	cpushare             int64
 	cpusetcpus           string
@@ -85,23 +86,32 @@ func (c *container) config() (*types.ContainerCreateConfig, error) {
 	}
 
 	var networkMode string
-	if len(c.networks) == 0 {
-		networkMode = "bridge"
-	}
+	// FIXME: Temporarily closed.
+	//if len(c.networks) == 0 {
+	//	networkMode = "bridge"
+	//}
 	networkingConfig := &types.NetworkingConfig{
 		EndpointsConfig: map[string]*types.EndpointSettings{},
 	}
 	for _, network := range c.networks {
-		name, ip, err := parseNetwork(network)
+		name, parameter, mode, err := parseNetwork(network)
 		if err != nil {
 			return nil, err
 		}
 
-		networkingConfig.EndpointsConfig[name] = &types.EndpointSettings{
-			IPAddress: ip,
-			IPAMConfig: &types.EndpointIPAMConfig{
-				IPV4Address: ip,
-			},
+		if networkMode == "" || mode == "mode" {
+			networkMode = name
+		}
+
+		if name == "container" {
+			networkMode = fmt.Sprintf("%s:%s", name, parameter)
+		} else if ipaddr := net.ParseIP(parameter); ipaddr != nil {
+			networkingConfig.EndpointsConfig[name] = &types.EndpointSettings{
+				IPAddress: parameter,
+				IPAMConfig: &types.EndpointIPAMConfig{
+					IPV4Address: parameter,
+				},
+			}
 		}
 	}
 
@@ -111,6 +121,7 @@ func (c *container) config() (*types.ContainerCreateConfig, error) {
 			Env:        c.env,
 			Entrypoint: strings.Fields(c.entrypoint),
 			WorkingDir: c.workdir,
+			User:       c.user,
 			Hostname:   strfmt.Hostname(c.hostname),
 			Labels:     labels,
 		},
@@ -155,22 +166,30 @@ func (c *container) config() (*types.ContainerCreateConfig, error) {
 func parseSysctls(sysctls []string) (map[string]string, error) {
 	results := make(map[string]string)
 	for _, sysctl := range sysctls {
-		fields := strings.SplitN(sysctl, "=", 2)
-		if len(fields) != 2 {
-			return nil, fmt.Errorf("invalid sysctl: %s: sysctl must be in format of key=value", sysctl)
+		fields, err := parseSysctl(sysctl)
+		if err != nil {
+			return nil, err
 		}
 		k, v := fields[0], fields[1]
 		results[k] = v
 	}
 	return results, nil
+}
+
+func parseSysctl(sysctl string) ([]string, error) {
+	fields := strings.SplitN(sysctl, "=", 2)
+	if len(fields) != 2 {
+		return nil, fmt.Errorf("invalid sysctl %s: sysctl must be in format of key=value", sysctl)
+	}
+	return fields, nil
 }
 
 func parseLabels(labels []string) (map[string]string, error) {
 	results := make(map[string]string)
 	for _, label := range labels {
-		fields := strings.SplitN(label, "=", 2)
-		if len(fields) != 2 {
-			return nil, fmt.Errorf("invalid label: %s", label)
+		fields, err := parseLabel(label)
+		if err != nil {
+			return nil, err
 		}
 		k, v := fields[0], fields[1]
 		results[k] = v
@@ -178,19 +197,35 @@ func parseLabels(labels []string) (map[string]string, error) {
 	return results, nil
 }
 
+func parseLabel(label string) ([]string, error) {
+	fields := strings.SplitN(label, "=", 2)
+	if len(fields) != 2 {
+		return nil, fmt.Errorf("invalid label %s: label must be in format of key=value", label)
+	}
+	return fields, nil
+}
+
 func parseDeviceMappings(devices []string) ([]*types.DeviceMapping, error) {
 	results := []*types.DeviceMapping{}
 	for _, device := range devices {
-		deviceMapping, err := runconfig.ParseDevice(device)
+		deviceMapping, err := parseDevice(device)
 		if err != nil {
-			return nil, fmt.Errorf("parse devices error: %s", err)
-		}
-		if !runconfig.ValidDeviceMode(deviceMapping.CgroupPermissions) {
-			return nil, fmt.Errorf("%s invalid device mode: %s", device, deviceMapping.CgroupPermissions)
+			return nil, err
 		}
 		results = append(results, deviceMapping)
 	}
 	return results, nil
+}
+
+func parseDevice(device string) (*types.DeviceMapping, error) {
+	deviceMapping, err := runconfig.ParseDevice(device)
+	if err != nil {
+		return nil, fmt.Errorf("parse devices error: %s", err)
+	}
+	if !runconfig.ValidDeviceMode(deviceMapping.CgroupPermissions) {
+		return nil, fmt.Errorf("%s invalid device mode: %s", device, deviceMapping.CgroupPermissions)
+	}
+	return deviceMapping, nil
 }
 
 func parseMemory(memory string) (int64, error) {
@@ -256,32 +291,41 @@ func parseRestartPolicy(restartPolicy string) (*types.RestartPolicy, error) {
 	return policy, nil
 }
 
-func parseNetwork(network string) (string, string, error) {
+// network format as below:
+// [network]:[ip_address], such as: mynetwork:172.17.0.2 or mynetwork(ip alloc by ipam) or 172.17.0.2(default network is bridge)
+// [network_mode]:[parameter], such as: host(use host network) or container:containerID(use exist container network)
+// [network_mode]:[parameter]:mode, such as: mynetwork:172.17.0.2:mode(if the container has multi-networks, the network is the default network mode)
+func parseNetwork(network string) (string, string, string, error) {
 	var (
-		name string
-		ip   string
+		name      string
+		parameter string
+		mode      string
 	)
 	if network == "" {
-		return "", "", fmt.Errorf("invalid network: cannot be empty")
+		return "", "", "", fmt.Errorf("invalid network: cannot be empty")
 	}
 	arr := strings.Split(network, ":")
 	switch len(arr) {
 	case 1:
 		if ipaddr := net.ParseIP(arr[0]); ipaddr != nil {
-			ip = arr[0]
+			parameter = arr[0]
 		} else {
 			name = arr[0]
 		}
+	case 2:
+		name = arr[0]
+		if name == "container" {
+			parameter = arr[1]
+		} else if ipaddr := net.ParseIP(arr[1]); ipaddr != nil {
+			parameter = arr[1]
+		} else {
+			mode = arr[1]
+		}
 	default:
 		name = arr[0]
-		ip = arr[1]
+		parameter = arr[1]
+		mode = arr[2]
 	}
 
-	if ip != "" {
-		if ipaddr := net.ParseIP(ip); ipaddr == nil {
-			return "", "", fmt.Errorf("invalid network ip: %s", ip)
-		}
-	}
-
-	return name, ip, nil
+	return name, parameter, mode, nil
 }

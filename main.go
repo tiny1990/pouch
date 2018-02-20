@@ -55,7 +55,9 @@ func setupFlags(cmd *cobra.Command) {
 
 	flagSet.StringVar(&cfg.HomeDir, "home-dir", "/var/lib/pouch", "Specify root dir of pouchd")
 	flagSet.StringArrayVarP(&cfg.Listen, "listen", "l", []string{"unix:///var/run/pouchd.sock"}, "Specify listening addresses of Pouchd")
-	flagSet.StringVar(&cfg.ListenCRI, "listen-cri", "/var/run/pouchcri.sock", "Specify listening address of CRI")
+	flagSet.StringVar(&cfg.CriConfig.Listen, "listen-cri", "/var/run/pouchcri.sock", "Specify listening address of CRI")
+	flagSet.StringVar(&cfg.CriConfig.NetworkPluginBinDir, "cni-bin-dir", "/opt/cni/bin", "The directory for putting cni plugin binaries.")
+	flagSet.StringVar(&cfg.CriConfig.NetworkPluginConfDir, "cni-conf-dir", "/etc/cni/net.d", "The directory for putting cni plugin configuration files.")
 	flagSet.BoolVarP(&cfg.Debug, "debug", "D", false, "Switch daemon log level to DEBUG mode")
 	flagSet.StringVarP(&cfg.ContainerdAddr, "containerd", "c", "/var/run/containerd.sock", "Specify listening address of containerd")
 	flagSet.StringVar(&cfg.ContainerdPath, "containerd-path", "", "Specify the path of containerd binary")
@@ -69,6 +71,7 @@ func setupFlags(cmd *cobra.Command) {
 	flagSet.StringVar(&cfg.LxcfsBinPath, "lxcfs", "/usr/local/bin/lxcfs", "Specify the path of lxcfs binary")
 	flagSet.StringVar(&cfg.LxcfsHome, "lxcfs-home", "/var/lib/lxc/lxcfs", "Specify the mount dir of lxcfs")
 	flagSet.StringVar(&cfg.DefaultRegistry, "default-registry", "registry.hub.docker.com/library/", "Default Image Registry")
+	flagSet.StringVar(&cfg.ImageProxy, "image-proxy", "http://127.0.0.1:5678", "Http proxy to pull image")
 }
 
 // runDaemon prepares configs, setups essential details and runs pouchd daemon.

@@ -91,6 +91,33 @@ func extractLabels(input map[string]string) (map[string]string, map[string]strin
 	return labels, annotations
 }
 
+func generateMountBindings(mounts []*runtime.Mount) []string {
+	result := make([]string, 0, len(mounts))
+	for _, m := range mounts {
+		bind := fmt.Sprintf("%s:%s", m.HostPath, m.ContainerPath)
+		var attrs []string
+		if m.Readonly {
+			attrs = append(attrs, "ro")
+		}
+		if m.SelinuxRelabel {
+			attrs = append(attrs, "Z")
+		}
+		switch m.Propagation {
+		case runtime.MountPropagation_PROPAGATION_PRIVATE:
+			// noop, default mode is private.
+		case runtime.MountPropagation_PROPAGATION_BIDIRECTIONAL:
+			attrs = append(attrs, "rshared")
+		case runtime.MountPropagation_PROPAGATION_HOST_TO_CONTAINER:
+			attrs = append(attrs, "rslave")
+		}
+		if len(attrs) > 0 {
+			bind = fmt.Sprintf("%s:%s", bind, strings.Join(attrs, ","))
+		}
+		result = append(result, bind)
+	}
+	return result
+}
+
 // Sandbox related tool functions.
 
 // makeSandboxName generates sandbox name from sandbox metadata. The name
@@ -345,8 +372,23 @@ func modifyHostConfig(sc *runtime.LinuxContainerSecurityContext, hostConfig *api
 	return nil
 }
 
+// modifyContainerConfig applies container security context config to pouch's Config.
+func modifyContainerConfig(sc *runtime.LinuxContainerSecurityContext, config *apitypes.ContainerConfig) {
+	if sc == nil {
+		return
+	}
+	if sc.RunAsUser != nil {
+		config.User = strconv.FormatInt(sc.GetRunAsUser().Value, 10)
+	}
+	if sc.RunAsUsername != "" {
+		config.User = sc.RunAsUsername
+	}
+}
+
 // applyContainerSecurityContext updates pouch container options according to security context.
 func applyContainerSecurityContext(lc *runtime.LinuxContainerConfig, podSandboxID string, config *apitypes.ContainerConfig, hc *apitypes.HostConfig) error {
+	modifyContainerConfig(lc.SecurityContext, config)
+
 	err := modifyHostConfig(lc.SecurityContext, hc)
 	if err != nil {
 		return err
@@ -441,6 +483,17 @@ func filterCRIContainers(containers []*runtime.Container, filter *runtime.Contai
 	}
 
 	return filtered
+}
+
+// containerNetns returns the network namespace of the given container.
+func containerNetns(container *ContainerMeta) (string, error) {
+	pid := container.State.Pid
+	if pid == 0 {
+		// Pouch reports pid 0 for an exited container.
+		return "", fmt.Errorf("can't find network namespace for the terminated container %q", container.ID)
+	}
+
+	return fmt.Sprintf("/proc/%v/ns/net", pid), nil
 }
 
 // Image related tool functions.

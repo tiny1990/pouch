@@ -6,13 +6,13 @@ import (
 	"reflect"
 
 	"github.com/alibaba/pouch/apis/server"
-	"github.com/alibaba/pouch/cri"
+	cri "github.com/alibaba/pouch/cri/service"
 	"github.com/alibaba/pouch/ctrd"
 	"github.com/alibaba/pouch/daemon/config"
 	"github.com/alibaba/pouch/daemon/meta"
 	"github.com/alibaba/pouch/daemon/mgr"
 	"github.com/alibaba/pouch/internal"
-	"github.com/alibaba/pouch/network/bridge"
+	"github.com/alibaba/pouch/network/mode"
 
 	"github.com/gorilla/mux"
 	"github.com/sirupsen/logrus"
@@ -131,6 +131,9 @@ func (d *Daemon) Run() error {
 		return err
 	}
 
+	// set image proxy
+	ctrd.SetImageProxy(d.config.ImageProxy)
+
 	httpServerCloseCh := make(chan struct{})
 	go func() {
 		if err := d.server.Start(); err != nil {
@@ -196,5 +199,5 @@ func (d *Daemon) MetaStore() *meta.Store {
 }
 
 func (d *Daemon) networkInit(ctx context.Context) error {
-	return bridge.New(ctx, d.config.NetworkConfg.BridgeConfig, d.networkMgr)
+	return mode.NetworkModeInit(ctx, d.config.NetworkConfg, d.networkMgr)
 }

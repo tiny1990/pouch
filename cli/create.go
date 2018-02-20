@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -47,6 +48,7 @@ func (cc *CreateCommand) addFlags() {
 	flagSet.StringSliceVarP(&cc.labels, "label", "l", nil, "Set label for a container")
 	flagSet.StringVar(&cc.entrypoint, "entrypoint", "", "Overwrite the default entrypoint")
 	flagSet.StringVarP(&cc.workdir, "workdir", "w", "", "Set the working directory in a container")
+	flagSet.StringVarP(&cc.user, "user", "u", "", "UID")
 	flagSet.StringVar(&cc.hostname, "hostname", "", "Set container's hostname")
 	flagSet.Int64Var(&cc.cpushare, "cpu-share", 0, "CPU shares")
 	flagSet.StringVar(&cc.cpusetcpus, "cpuset-cpus", "", "CPUs in cpuset")
@@ -87,8 +89,9 @@ func (cc *CreateCommand) runCreate(args []string) error {
 	}
 	containerName := cc.name
 
+	ctx := context.Background()
 	apiClient := cc.cli.Client()
-	result, err := apiClient.ContainerCreate(config.ContainerConfig, config.HostConfig, config.NetworkingConfig, containerName)
+	result, err := apiClient.ContainerCreate(ctx, config.ContainerConfig, config.HostConfig, config.NetworkingConfig, containerName)
 	if err != nil {
 		return fmt.Errorf("failed to create container: %v", err)
 	}

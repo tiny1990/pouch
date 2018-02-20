@@ -3,6 +3,7 @@ package mgr
 import (
 	"context"
 	"fmt"
+	"os"
 	"path"
 	"strings"
 	"time"
@@ -13,11 +14,13 @@ import (
 	"github.com/alibaba/pouch/daemon/containerio"
 	"github.com/alibaba/pouch/daemon/meta"
 	"github.com/alibaba/pouch/lxcfs"
+	networktypes "github.com/alibaba/pouch/network/types"
 	"github.com/alibaba/pouch/pkg/collect"
 	"github.com/alibaba/pouch/pkg/errtypes"
 	"github.com/alibaba/pouch/pkg/randomid"
 	"github.com/alibaba/pouch/pkg/utils"
 
+	"github.com/go-openapi/strfmt"
 	"github.com/opencontainers/image-spec/specs-go/v1"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
@@ -250,6 +253,9 @@ func (mgr *ContainerManager) StartExec(ctx context.Context, execid string, confi
 		Cwd:      "/",
 		Env:      c.Config().Env,
 	}
+	if len(execConfig.User) == 0 {
+		setupProcessUser(ctx, c.meta, &SpecWrapper{s: &specs.Spec{Process: process}})
+	}
 
 	return mgr.Client.ExecContainer(ctx, &ctrd.Process{
 		ContainerID: execConfig.ContainerID,
@@ -343,13 +349,21 @@ func (mgr *ContainerManager) Create(ctx context.Context, name string, config *ty
 
 	// set network settings
 	meta.NetworkSettings = &types.NetworkSettings{}
-	if len(config.NetworkingConfig.EndpointsConfig) > 0 {
-		meta.NetworkSettings.Networks = config.NetworkingConfig.EndpointsConfig
-	} else {
+	networkMode := config.HostConfig.NetworkMode
+	if networkMode == "" {
+		//FIXME: Removing it, when stop container have deleted endpoints
+		//config.HostConfig.NetworkMode = "bridge"
 		meta.Config.NetworkDisabled = true
 	}
+	if len(config.NetworkingConfig.EndpointsConfig) > 0 {
+		meta.NetworkSettings.Networks = config.NetworkingConfig.EndpointsConfig
+	}
+	if meta.NetworkSettings.Networks == nil && networkMode != "" && !IsContainer(networkMode) {
+		meta.NetworkSettings.Networks = make(map[string]*types.EndpointSettings)
+		meta.NetworkSettings.Networks[config.HostConfig.NetworkMode] = new(types.EndpointSettings)
+	}
 
-	if err := parseSecurityOpt(meta, config.HostConfig.SecurityOpt); err != nil {
+	if err := parseSecurityOpts(meta, config.HostConfig.SecurityOpt); err != nil {
 		return nil, err
 	}
 
@@ -403,9 +417,36 @@ func (mgr *ContainerManager) Start(ctx context.Context, id, detachKeys string) (
 	}
 	c.DetachKeys = detachKeys
 
+	// initialise container network mode
+	networkMode := c.meta.HostConfig.NetworkMode
+	if IsContainer(networkMode) {
+		origContainer, err := mgr.Get(ctx, strings.SplitN(networkMode, ":", 2)[1])
+		if err != nil {
+			return err
+		}
+
+		c.meta.HostnamePath = origContainer.HostnamePath
+		c.meta.HostsPath = origContainer.HostsPath
+		c.meta.ResolvConfPath = origContainer.ResolvConfPath
+		c.meta.Config.Hostname = origContainer.Config.Hostname
+		c.meta.Config.Domainname = origContainer.Config.Domainname
+	}
+
+	// initialise host network mode
+	if IsHost(networkMode) {
+		hostname, err := os.Hostname()
+		if err != nil {
+			return err
+		}
+		c.meta.Config.Hostname = strfmt.Hostname(hostname)
+	}
+
 	// initialise network endpoint
 	for name, endpointSetting := range c.meta.NetworkSettings.Networks {
-		if _, err := mgr.NetworkMgr.EndpointCreate(ctx, c.ID(), name, c.meta.NetworkSettings, endpointSetting); err != nil {
+		endpoint := mgr.buildContainerEndpoint(c.meta)
+		endpoint.Name = name
+		endpoint.EndpointConfig = endpointSetting
+		if _, err := mgr.NetworkMgr.EndpointCreate(ctx, endpoint); err != nil {
 			logrus.Errorf("failed to create endpoint: %v", err)
 			return err
 		}
@@ -829,6 +870,16 @@ func (mgr *ContainerManager) parseVolumes(ctx context.Context, c *types.Containe
 			}
 
 			source = mountPath
+		} else {
+			// Create the host path if it doesn't exist.
+			_, err := os.Stat(source)
+			if err != nil && !os.IsNotExist(err) {
+				return errors.Errorf("failed to stat %q: %v", source, err)
+			}
+			err = os.MkdirAll(source, 0755)
+			if err != nil {
+				return errors.Errorf("failed to mkdir %q: %v", source, err)
+			}
 		}
 
 		switch len(arr) {
@@ -843,6 +894,27 @@ func (mgr *ContainerManager) parseVolumes(ctx context.Context, c *types.Containe
 		c.HostConfig.Binds[i] = b
 	}
 	return nil
+}
+
+func (mgr *ContainerManager) buildContainerEndpoint(c *ContainerMeta) *networktypes.Endpoint {
+	return &networktypes.Endpoint{
+		Owner:           c.ID,
+		Hostname:        c.Config.Hostname,
+		Domainname:      c.Config.Domainname,
+		HostsPath:       c.HostsPath,
+		ExtraHosts:      c.HostConfig.ExtraHosts,
+		HostnamePath:    c.HostnamePath,
+		ResolvConfPath:  c.ResolvConfPath,
+		NetworkDisabled: c.Config.NetworkDisabled,
+		NetworkMode:     c.HostConfig.NetworkMode,
+		DNS:             c.HostConfig.DNS,
+		DNSOptions:      c.HostConfig.DNSOptions,
+		DNSSearch:       c.HostConfig.DNSSearch,
+		MacAddress:      c.Config.MacAddress,
+		ExposedPorts:    c.Config.ExposedPorts,
+		PortBindings:    c.HostConfig.PortBindings,
+		NetworkConfig:   c.NetworkSettings,
+	}
 }
 
 func checkBind(b string) ([]string, error) {
