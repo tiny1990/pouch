@@ -20,8 +20,10 @@ func main() {
 	cli.AddCommand(base, &StopCommand{})
 	cli.AddCommand(base, &PsCommand{})
 	cli.AddCommand(base, &RmCommand{})
+	cli.AddCommand(base, &RestartCommand{})
 	cli.AddCommand(base, &ExecCommand{})
 	cli.AddCommand(base, &VersionCommand{})
+	cli.AddCommand(base, &InfoCommand{})
 	cli.AddCommand(base, &ImageMgmtCommand{})
 	cli.AddCommand(base, &ImagesCommand{})
 	cli.AddCommand(base, &RmiCommand{})
@@ -33,6 +35,12 @@ func main() {
 	cli.AddCommand(base, &PauseCommand{})
 	cli.AddCommand(base, &UnpauseCommand{})
 	cli.AddCommand(base, &RunCommand{})
+	cli.AddCommand(base, &LoginCommand{})
+	cli.AddCommand(base, &UpdateCommand{})
+	cli.AddCommand(base, &LogoutCommand{})
+	cli.AddCommand(base, &UpgradeCommand{})
+	cli.AddCommand(base, &TopCommand{})
+	cli.AddCommand(base, &LogsCommand{})
 
 	// add generate doc command
 	cli.AddCommand(base, &GenDocCommand{})

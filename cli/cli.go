@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"strconv"
 	"text/tabwriter"
@@ -29,7 +30,7 @@ type Option struct {
 type Cli struct {
 	Option
 	rootCmd   *cobra.Command
-	APIClient *client.APIClient
+	APIClient client.CommonAPIClient
 	padding   int
 }
 
@@ -69,7 +70,7 @@ func (c *Cli) NewAPIClient() {
 }
 
 // Client returns API client torwards daemon.
-func (c *Cli) Client() *client.APIClient {
+func (c *Cli) Client() client.CommonAPIClient {
 	return c.APIClient
 }
 
@@ -132,7 +133,7 @@ func (c *Cli) Print(obj interface{}) {
 			}
 
 		default:
-			continue
+			line = append(line, fmt.Sprintf("%v", v))
 		}
 
 		display.AddRow(line)

@@ -5,11 +5,12 @@ import (
 
 	"github.com/alibaba/pouch/test/command"
 	"github.com/alibaba/pouch/test/environment"
+
 	"github.com/go-check/check"
 	"github.com/gotestyourself/gotestyourself/icmd"
 )
 
-// PouchExecSuite is the test suite fo exec CLI.
+// PouchExecSuite is the test suite for exec CLI.
 type PouchExecSuite struct{}
 
 func init() {
@@ -33,6 +34,7 @@ func (suite *PouchExecSuite) TearDownTest(c *check.C) {
 func (suite *PouchExecSuite) TestExecCommand(c *check.C) {
 	name := "exec-normal"
 	res := command.PouchRun("run", "-d", "--name", name, busyboxImage, "sleep", "100000")
+	defer DelContainerForceMultyTime(c, name)
 
 	res.Assert(c, icmd.Success)
 
@@ -53,6 +55,7 @@ func (suite *PouchExecSuite) TestExecCommand(c *check.C) {
 func (suite *PouchExecSuite) TestExecMultiCommands(c *check.C) {
 	name := "exec-normal2"
 	res := command.PouchRun("run", "-d", "--name", name, busyboxImage, "sleep", "100000")
+	defer DelContainerForceMultyTime(c, name)
 
 	res.Assert(c, icmd.Success)
 
@@ -72,6 +75,7 @@ func (suite *PouchExecSuite) TestExecMultiCommands(c *check.C) {
 func (suite *PouchExecSuite) TestExecEcho(c *check.C) {
 	name := "TestExecEcho"
 	command.PouchRun("run", "-d", "--name", name, busyboxImage, "top").Assert(c, icmd.Success)
+	defer DelContainerForceMultyTime(c, name)
 
 	out := command.PouchRun("exec", name, "echo", "test").Stdout()
 	if !strings.Contains(out, "test") {
@@ -83,6 +87,7 @@ func (suite *PouchExecSuite) TestExecEcho(c *check.C) {
 func (suite *PouchExecSuite) TestExecStoppedContainer(c *check.C) {
 	name := "TestExecStoppedContainer"
 	command.PouchRun("run", "-d", "--name", name, busyboxImage, "top").Assert(c, icmd.Success)
+	defer DelContainerForceMultyTime(c, name)
 
 	command.PouchRun("stop", name).Assert(c, icmd.Success)
 
@@ -101,6 +106,7 @@ func (suite *PouchExecSuite) TestExecInteractive(c *check.C) {
 func (suite *PouchExecSuite) TestExecAfterContainerRestart(c *check.C) {
 	name := "TestExecAfterContainerRestart"
 	command.PouchRun("run", "-d", "--name", name, busyboxImage, "top").Assert(c, icmd.Success)
+	defer DelContainerForceMultyTime(c, name)
 
 	command.PouchRun("stop", name).Assert(c, icmd.Success)
 

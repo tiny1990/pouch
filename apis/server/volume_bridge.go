@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 
 	"github.com/alibaba/pouch/apis/types"
@@ -41,12 +42,31 @@ func (s *Server) createVolume(ctx context.Context, rw http.ResponseWriter, req *
 		return err
 	}
 
-	volume := types.VolumeInfo{
-		Name:   name,
-		Driver: driver,
-		Labels: config.Labels,
+	volume, err := s.VolumeMgr.Get(ctx, name)
+	if err != nil {
+		return err
 	}
-	return EncodeResponse(rw, http.StatusCreated, volume)
+
+	respVolume := types.VolumeInfo{
+		Name:       name,
+		Driver:     driver,
+		Labels:     config.Labels,
+		Mountpoint: volume.Path(),
+		CreatedAt:  volume.CreationTimestamp.Format("2006-1-2 15:04:05"),
+	}
+
+	var status map[string]interface{}
+	for k, v := range volume.Options() {
+		if k != "" && v != "" {
+			if status == nil {
+				status = make(map[string]interface{})
+			}
+			status[k] = v
+		}
+	}
+	respVolume.Status = status
+
+	return EncodeResponse(rw, http.StatusCreated, respVolume)
 }
 
 func (s *Server) getVolume(ctx context.Context, rw http.ResponseWriter, req *http.Request) (err error) {
@@ -61,15 +81,34 @@ func (s *Server) getVolume(ctx context.Context, rw http.ResponseWriter, req *htt
 		Mountpoint: volume.Path(),
 		CreatedAt:  volume.CreationTimestamp.Format("2006-1-2 15:04:05"),
 		Labels:     volume.Labels,
-		Status: map[string]interface{}{
-			"size": volume.Size(),
-		},
 	}
+
+	var status map[string]interface{}
+	for k, v := range volume.Options() {
+		if k != "" && v != "" {
+			if status == nil {
+				status = make(map[string]interface{})
+			}
+			status[k] = v
+		}
+	}
+	respVolume.Status = status
+
 	return EncodeResponse(rw, http.StatusOK, respVolume)
 }
 
 func (s *Server) removeVolume(ctx context.Context, rw http.ResponseWriter, req *http.Request) error {
 	name := mux.Vars(req)["name"]
+
+	v, err := s.VolumeMgr.Get(ctx, name)
+	if err != nil {
+		return err
+	}
+
+	ref := v.Option("ref")
+	if ref != "" {
+		return fmt.Errorf("failed to remove volume: %s, using by: %s", name, ref)
+	}
 
 	if err := s.VolumeMgr.Remove(ctx, name); err != nil {
 		return err

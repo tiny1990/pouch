@@ -136,6 +136,11 @@ func (v *Volume) SetOption(name, value string) {
 	v.Spec.Extra[name] = value
 }
 
+// Options returns all the options of volume.
+func (v *Volume) Options() map[string]string {
+	return v.Spec.Extra
+}
+
 // Driver return driver's name of the volume.
 func (v *Volume) Driver() string {
 	return v.Spec.Backend
@@ -179,6 +184,11 @@ func (v *Volume) FileSystem() []string {
 // MountOption returns volume's mount options.
 func (v *Volume) MountOption() []string {
 	return strings.Split(v.Spec.MountOpt, " ")
+}
+
+// Key returns the volume's name
+func (v *Volume) Key() string {
+	return v.Name
 }
 
 // VolumeID use to define the volume's identity.

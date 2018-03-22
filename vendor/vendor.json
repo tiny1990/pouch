@@ -3,12 +3,6 @@
 	"ignore": "test",
 	"package": [
 		{
-			"checksumSHA1": "pkj2Ye4zdp0xPbL3kMwYevlpwQo=",
-			"path": "code.cloudfoundry.org/bytefmt",
-			"revision": "f4415fafc5619dd75599a54a7c91fb3948ad58bd",
-			"revisionTime": "2017-04-28T00:31:08Z"
-		},
-		{
 			"checksumSHA1": "FU/snvk/G/MqCWeKVnTyCKx+Y5M=",
 			"path": "github.com/Microsoft/go-winio/vhd",
 			"revision": ""
@@ -410,6 +404,12 @@
 			"revisionTime": "2018-01-31T23:13:00Z"
 		},
 		{
+			"checksumSHA1": "1IPGX6/BnX7QN4DjbBk0UafTB2U=",
+			"path": "github.com/docker/go-connections/nat",
+			"revision": "7395e3f8aa162843a74ed6d48e79627d9792ac55",
+			"revisionTime": "2018-02-28T14:10:15Z"
+		},
+		{
 			"checksumSHA1": "Oq8DJr2mCWo5McNwdMFVwBsieXQ=",
 			"path": "github.com/docker/go-events",
 			"revision": "2b8ed96d2a422bf205adcdfa05272dc12c81613b",
@@ -421,6 +421,18 @@
 			"path": "github.com/docker/go-units",
 			"revision": "2b8ed96d2a422bf205adcdfa05272dc12c81613b",
 			"revisionTime": "2017-11-08T19:22:26Z"
+		},
+		{
+			"checksumSHA1": "5Z0J6IIV39bPOf0NOVHLolGwcfo=",
+			"path": "github.com/docker/spdystream",
+			"revision": "bc6354cbbc295e925e4c611ffe90c1f287ee54db",
+			"revisionTime": "2017-09-12T18:36:27Z"
+		},
+		{
+			"checksumSHA1": "Gaf5SDyC0xV32LdjPCyUGvH5BhI=",
+			"path": "github.com/docker/spdystream/spdy",
+			"revision": "bc6354cbbc295e925e4c611ffe90c1f287ee54db",
+			"revisionTime": "2017-09-12T18:36:27Z"
 		},
 		{
 			"checksumSHA1": "40Ns85VYa4smQPcewZ7SOdfLnKU=",
@@ -562,6 +574,24 @@
 			"revisionTime": "2017-11-08T19:22:26Z"
 		},
 		{
+			"checksumSHA1": "mLmwamaqyrVUNOmTAGaSpnO1YJQ=",
+			"path": "github.com/google/gops/agent",
+			"revision": "160b358b10d6123169a895090938b088c8f78dc9",
+			"revisionTime": "2018-03-11T05:24:15Z"
+		},
+		{
+			"checksumSHA1": "4/oP9EPM60f4djEKTtRqMJPaeOo=",
+			"path": "github.com/google/gops/internal",
+			"revision": "160b358b10d6123169a895090938b088c8f78dc9",
+			"revisionTime": "2018-03-11T05:24:15Z"
+		},
+		{
+			"checksumSHA1": "jKzg09NDPfnmGeZhp+YSVaq4cb0=",
+			"path": "github.com/google/gops/signal",
+			"revision": "160b358b10d6123169a895090938b088c8f78dc9",
+			"revisionTime": "2018-03-11T05:24:15Z"
+		},
+		{
 			"checksumSHA1": "g/V4qrXjUGG9B+e3hB+4NAYJ5Gs=",
 			"path": "github.com/gorilla/context",
 			"revision": "08b5f424b9271eedf6f9f0ce86cb9396ed337a42",
@@ -578,6 +608,12 @@
 			"path": "github.com/gotestyourself/gotestyourself/icmd",
 			"revision": "b5461758462b97cff258bf388ca42110f529d747",
 			"revisionTime": "2017-11-07T15:27:38Z"
+		},
+		{
+			"checksumSHA1": "gEjGS03N1eysvpQ+FCHTxPcbxXc=",
+			"path": "github.com/kardianos/osext",
+			"revision": "ae77be60afb1dcacde03767a8c37337fad28ac14",
+			"revisionTime": "2017-05-10T13:15:34Z"
 		},
 		{
 			"checksumSHA1": "jHOLsfeMPcX84YQB2MXBqXFntBg=",

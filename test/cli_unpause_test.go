@@ -8,7 +8,7 @@ import (
 	"github.com/gotestyourself/gotestyourself/icmd"
 )
 
-// PouchUnpauseSuite is the test suite fo help CLI.
+// PouchUnpauseSuite is the test suite for unpause CLI.
 type PouchUnpauseSuite struct{}
 
 func init() {
@@ -33,6 +33,8 @@ func (suite *PouchUnpauseSuite) TestUnpauseWorks(c *check.C) {
 		command.PouchRun("create", "--name", name, busyboxImage).Assert(c, icmd.Success)
 
 		command.PouchRun("start", name).Assert(c, icmd.Success)
+
+		defer DelContainerForceMultyTime(c, name)
 	}
 
 	command.PouchRun("pause", containernames[0]).Assert(c, icmd.Success)

@@ -10,9 +10,11 @@ import (
 type SpecWrapper struct {
 	s *specs.Spec
 
-	ctrMgr ContainerMgr
-	volMgr VolumeMgr
-	netMgr NetworkMgr
+	ctrMgr  ContainerMgr
+	volMgr  VolumeMgr
+	netMgr  NetworkMgr
+	prioArr []int
+	argsArr [][]string
 }
 
 // SetupFunc defines spec setup function type.
@@ -58,9 +60,16 @@ var setupFunc = []SetupFunc{
 
 	// blkio spec
 	setupBlkio,
+	setupDiskQuota,
 
 	// IntelRdtL3Cbm
 	setupIntelRdt,
+
+	// annotations in spec
+	setupAnnotations,
+
+	//hook
+	setupHook,
 }
 
 // Register is used to registe spec setup function.

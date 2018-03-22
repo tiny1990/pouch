@@ -1,6 +1,7 @@
 package reference
 
-// Reference represents image name which may include domain/name:tag or only digest.
+// Reference represents image name which may include hub/namespace/name:tag
+// like registry.hub.docker.com/library/ubuntu or only digest.
 type Reference interface {
 	String() string
 }
@@ -19,7 +20,7 @@ type Tagged interface {
 
 // Digested is an object which is digest.
 type Digested interface {
-	Reference
+	Named
 	Digest() string
 }
 
@@ -51,12 +52,15 @@ func (t taggedReference) String() string {
 }
 
 // taggedReference represents the image digest information.
-type digestReference string
+type digestReference struct {
+	Named
+	digest string
+}
 
 func (d digestReference) String() string {
-	return string(d)
+	return d.Name() + "@" + d.digest
 }
 
 func (d digestReference) Digest() string {
-	return string(d)
+	return d.digest
 }

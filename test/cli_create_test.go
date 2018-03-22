@@ -2,16 +2,18 @@ package main
 
 import (
 	"encoding/json"
+	"runtime"
 	"strings"
 
 	"github.com/alibaba/pouch/apis/types"
 	"github.com/alibaba/pouch/test/command"
 	"github.com/alibaba/pouch/test/environment"
+
 	"github.com/go-check/check"
 	"github.com/gotestyourself/gotestyourself/icmd"
 )
 
-// PouchCreateSuite is the test suite fo help CLI.
+// PouchCreateSuite is the test suite for create CLI.
 type PouchCreateSuite struct{}
 
 func init() {
@@ -31,7 +33,7 @@ func (suite *PouchCreateSuite) SetUpSuite(c *check.C) {
 func (suite *PouchCreateSuite) TearDownTest(c *check.C) {
 }
 
-// TestCreateName is to verify the correctness of creating contaier with specified name.
+// TestCreateName is to verify the correctness of creating container with specified name.
 func (suite *PouchCreateSuite) TestCreateName(c *check.C) {
 	name := "create-normal"
 	res := command.PouchRun("create", "--name", name, busyboxImage)
@@ -40,6 +42,8 @@ func (suite *PouchCreateSuite) TestCreateName(c *check.C) {
 	if out := res.Combined(); !strings.Contains(out, name) {
 		c.Fatalf("unexpected output %s expected %s\n", out, name)
 	}
+
+	defer DelContainerForceMultyTime(c, name)
 }
 
 // TestCreateNameByImageID is to verify the correctness of creating contaier with specified name by image id.
@@ -56,6 +60,8 @@ func (suite *PouchCreateSuite) TestCreateNameByImageID(c *check.C) {
 	if out := res.Combined(); !strings.Contains(out, name) {
 		c.Fatalf("unexpected output %s expected %s\n", out, name)
 	}
+
+	DelContainerForceMultyTime(c, name)
 }
 
 // TestCreateDuplicateContainerName is to verify duplicate container names.
@@ -64,6 +70,8 @@ func (suite *PouchCreateSuite) TestCreateDuplicateContainerName(c *check.C) {
 
 	res := command.PouchRun("create", "--name", name, busyboxImage)
 	res.Assert(c, icmd.Success)
+
+	defer DelContainerForceMultyTime(c, name)
 
 	res = command.PouchRun("create", "--name", name, busyboxImage)
 	c.Assert(res.Error, check.NotNil)
@@ -77,24 +85,39 @@ func (suite *PouchCreateSuite) TestCreateDuplicateContainerName(c *check.C) {
 //
 // TODO: pouch inspect should return args info
 func (suite *PouchCreateSuite) TestCreateWithArgs(c *check.C) {
-	res := command.PouchRun("create", busyboxImage, "/bin/ls")
+	name := "TestCreateWithArgs"
+	res := command.PouchRun("create", "--name", name, busyboxImage, "/bin/ls")
 	res.Assert(c, icmd.Success)
+
+	defer DelContainerForceMultyTime(c, name)
 }
 
 // TestCreateWithTTY is to verify tty flag.
 //
 // TODO: pouch inspect should return tty info
 func (suite *PouchCreateSuite) TestCreateWithTTY(c *check.C) {
-	res := command.PouchRun("create", "-t", busyboxImage)
+	name := "TestCreateWithTTY"
+	res := command.PouchRun("create", "-t", "--name", name, busyboxImage)
 	res.Assert(c, icmd.Success)
+
+	defer DelContainerForceMultyTime(c, name)
 }
 
 // TestPouchCreateVolume is to verify volume flag.
 //
 // TODO: pouch inspect should return volume info to check
 func (suite *PouchCreateSuite) TestPouchCreateVolume(c *check.C) {
-	res := command.PouchRun("create", "-v /tmp:/tmp", busyboxImage)
+	pc, _, _, _ := runtime.Caller(0)
+	tmpname := strings.Split(runtime.FuncForPC(pc).Name(), ".")
+	var funcname string
+	for i := range tmpname {
+		funcname = tmpname[i]
+	}
+
+	res := command.PouchRun("create", "-v /tmp:/tmp", "--name", funcname, busyboxImage)
 	res.Assert(c, icmd.Success)
+
+	defer DelContainerForceMultyTime(c, funcname)
 }
 
 // TestCreateInWrongWay tries to run create in wrong way.
@@ -120,6 +143,7 @@ func (suite *PouchCreateSuite) TestCreateWithLabels(c *check.C) {
 
 	res := command.PouchRun("create", "--name", name, "-l", label, busyboxImage)
 	res.Assert(c, icmd.Success)
+	defer DelContainerForceMultyTime(c, name)
 
 	output := command.PouchRun("inspect", name).Stdout()
 
@@ -141,6 +165,7 @@ func (suite *PouchCreateSuite) TestCreateWithSysctls(c *check.C) {
 
 	res := command.PouchRun("create", "--name", name, "--sysctl", sysctl, busyboxImage)
 	res.Assert(c, icmd.Success)
+	defer DelContainerForceMultyTime(c, name)
 
 	output := command.PouchRun("inspect", name).Stdout()
 
@@ -162,6 +187,7 @@ func (suite *PouchCreateSuite) TestCreateWithAppArmor(c *check.C) {
 
 	res := command.PouchRun("create", "--name", name, "--security-opt", appArmor, busyboxImage)
 	res.Assert(c, icmd.Success)
+	defer DelContainerForceMultyTime(c, name)
 
 	output := command.PouchRun("inspect", name).Stdout()
 
@@ -189,6 +215,7 @@ func (suite *PouchCreateSuite) TestCreateWithSeccomp(c *check.C) {
 
 	res := command.PouchRun("create", "--name", name, "--security-opt", seccomp, busyboxImage)
 	res.Assert(c, icmd.Success)
+	defer DelContainerForceMultyTime(c, name)
 
 	output := command.PouchRun("inspect", name).Stdout()
 
@@ -216,6 +243,7 @@ func (suite *PouchCreateSuite) TestCreateWithCapability(c *check.C) {
 
 	res := command.PouchRun("create", "--name", name, "--cap-add", capability, busyboxImage, "brctl", "addbr", "foobar")
 	res.Assert(c, icmd.Success)
+	defer DelContainerForceMultyTime(c, name)
 
 	output := command.PouchRun("inspect", name).Stdout()
 
@@ -242,6 +270,7 @@ func (suite *PouchCreateSuite) TestCreateWithPrivilege(c *check.C) {
 
 	res := command.PouchRun("create", "--name", name, "--privileged", busyboxImage, "brctl", "addbr", "foobar")
 	res.Assert(c, icmd.Success)
+	defer DelContainerForceMultyTime(c, name)
 
 	output := command.PouchRun("inspect", name).Stdout()
 
@@ -345,4 +374,25 @@ func (suite *PouchCreateSuite) TestCreateWithIntelRdt(c *check.C) {
 		c.Errorf("failed to decode inspect output: %v", err)
 	}
 	c.Assert(result.HostConfig.IntelRdtL3Cbm, check.Equals, intelRdt)
+}
+
+// TestCreateWithAliOSMemoryOptions tests creating container with AliOS container isolation options.
+func (suite *PouchCreateSuite) TestCreateWithAliOSMemoryOptions(c *check.C) {
+	name := "TestCreateWithAliOSMemoryOptions"
+	memoryWmarkRatio := "30"
+	memoryExtra := "50"
+
+	res := command.PouchRun("create", "--name", name, "--memory-wmark-ratio", memoryWmarkRatio, "--memory-extra", memoryExtra, "--memory-force-empty-ctl", "1", "--sche-lat-switch", "1", busyboxImage)
+	res.Assert(c, icmd.Success)
+
+	output := command.PouchRun("inspect", name).Stdout()
+
+	result := &types.ContainerJSON{}
+	if err := json.Unmarshal([]byte(output), result); err != nil {
+		c.Errorf("failed to decode inspect output: %v", err)
+	}
+	c.Assert(*result.HostConfig.MemoryWmarkRatio, check.Equals, int64(30))
+	c.Assert(*result.HostConfig.MemoryExtra, check.Equals, int64(50))
+	c.Assert(result.HostConfig.MemoryForceEmptyCtl, check.Equals, int64(1))
+	c.Assert(result.HostConfig.ScheLatSwitch, check.Equals, int64(1))
 }

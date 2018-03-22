@@ -5,8 +5,10 @@ import (
 	"runtime"
 
 	"github.com/alibaba/pouch/apis/types"
+	"github.com/alibaba/pouch/pkg/kernel"
 	"github.com/alibaba/pouch/test/environment"
 	"github.com/alibaba/pouch/test/request"
+	"github.com/alibaba/pouch/test/util"
 	"github.com/alibaba/pouch/version"
 	"github.com/go-check/check"
 )
@@ -37,7 +39,18 @@ func (suite *APISystemSuite) TestInfo(c *check.C) {
 	got := types.SystemInfo{}
 	err = json.NewDecoder(resp.Body).Decode(&got)
 	c.Assert(err, check.IsNil)
-	c.Assert(got, check.Equals, types.SystemInfo{})
+
+	kernelInfo := "<unknown>"
+	if Info, err := kernel.GetKernelVersion(); err == nil {
+		kernelInfo = Info.String()
+
+	}
+	// TODO more variables are to be checked.
+	c.Assert(got.IndexServerAddress, check.Equals, "https://index.docker.io/v1/")
+	c.Assert(got.KernelVersion, check.Equals, kernelInfo)
+	c.Assert(got.OSType, check.Equals, runtime.GOOS)
+	c.Assert(got.ServerVersion, check.Equals, version.Version)
+
 }
 
 // TestVersion tests /version API.
@@ -67,4 +80,23 @@ func (suite *APISystemSuite) TestVersion(c *check.C) {
 		Os:         runtime.GOOS,
 		Version:    version.Version,
 	})
+}
+
+// If the /auth is ready, we can login to the registry.
+func (suite *APISystemSuite) TestRegistryLogin(c *check.C) {
+	SkipIfFalse(c, environment.IsHubConnected)
+
+	body := request.WithJSONBody(map[string]interface{}{
+		"Username": testHubUser,
+		"Password": testHubPasswd,
+	})
+
+	resp, err := request.Post("/auth", body)
+	c.Assert(err, check.IsNil)
+	defer resp.Body.Close()
+
+	CheckRespStatus(c, resp, 200)
+	authResp := &types.AuthResponse{}
+	request.DecodeBody(authResp, resp.Body)
+	c.Assert(util.PartialEqual(authResp.Status, "Login Succeeded"), check.IsNil)
 }

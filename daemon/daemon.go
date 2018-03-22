@@ -2,35 +2,41 @@ package daemon
 
 import (
 	"context"
+	"fmt"
 	"path"
+	"plugin"
 	"reflect"
 
+	"github.com/alibaba/pouch/apis/plugins"
 	"github.com/alibaba/pouch/apis/server"
 	cri "github.com/alibaba/pouch/cri/service"
 	"github.com/alibaba/pouch/ctrd"
 	"github.com/alibaba/pouch/daemon/config"
-	"github.com/alibaba/pouch/daemon/meta"
 	"github.com/alibaba/pouch/daemon/mgr"
 	"github.com/alibaba/pouch/internal"
 	"github.com/alibaba/pouch/network/mode"
+	"github.com/alibaba/pouch/pkg/meta"
 
 	"github.com/gorilla/mux"
+	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
 
 // Daemon refers to a daemon.
 type Daemon struct {
-	config         config.Config
-	containerStore *meta.Store
-	containerd     *ctrd.Client
-	containerMgr   mgr.ContainerMgr
-	systemMgr      mgr.SystemMgr
-	imageMgr       mgr.ImageMgr
-	volumeMgr      mgr.VolumeMgr
-	networkMgr     mgr.NetworkMgr
-	criMgr         mgr.CriMgr
-	server         server.Server
-	criService     *cri.Service
+	config          config.Config
+	containerStore  *meta.Store
+	containerd      *ctrd.Client
+	containerMgr    mgr.ContainerMgr
+	systemMgr       mgr.SystemMgr
+	imageMgr        mgr.ImageMgr
+	volumeMgr       mgr.VolumeMgr
+	networkMgr      mgr.NetworkMgr
+	criMgr          mgr.CriMgr
+	server          server.Server
+	criService      *cri.Service
+	containerPlugin plugins.ContainerPlugin
+	daemonPlugin    plugins.DaemonPlugin
 }
 
 // router represents the router of daemon.
@@ -42,6 +48,7 @@ type router struct {
 // NewDaemon constructs a brand new server.
 func NewDaemon(cfg config.Config) *Daemon {
 	containerStore, err := meta.NewStore(meta.Config{
+		Driver:  "local",
 		BaseDir: path.Join(cfg.HomeDir, "containers"),
 		Buckets: []meta.Bucket{
 			{
@@ -70,10 +77,57 @@ func NewDaemon(cfg config.Config) *Daemon {
 	}
 }
 
+func loadSymbolByName(p *plugin.Plugin, name string) (plugin.Symbol, error) {
+	s, err := p.Lookup(name)
+	if err != nil {
+		return nil, errors.Wrapf(err, "lookup plugin with name %s error", name)
+	}
+	return s, nil
+}
+
 // Run starts daemon.
 func (d *Daemon) Run() error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+
+	var s plugin.Symbol
+	var err error
+
+	if d.config.PluginPath != "" {
+		p, err := plugin.Open(d.config.PluginPath)
+		if err != nil {
+			return errors.Wrapf(err, "load plugin at %s error", d.config.PluginPath)
+		}
+
+		//load container plugin if exist
+		if s, err = loadSymbolByName(p, "DaemonPlugin"); err != nil {
+			return err
+		}
+		if daemonPlugin, ok := s.(plugins.DaemonPlugin); ok {
+			logrus.Infof("setup daemon plugin from %s", d.config.PluginPath)
+			d.daemonPlugin = daemonPlugin
+		} else if s != nil {
+			return fmt.Errorf("not a container plugin at %s %q", d.config.PluginPath, s)
+		}
+
+		//load container plugin if exist
+		if s, err = loadSymbolByName(p, "ContainerPlugin"); err != nil {
+			return err
+		}
+		if containerPlugin, ok := s.(plugins.ContainerPlugin); ok {
+			logrus.Infof("setup container plugin from %s", d.config.PluginPath)
+			d.containerPlugin = containerPlugin
+		} else if s != nil {
+			return fmt.Errorf("not a container plugin at %s %q", d.config.PluginPath, s)
+		}
+	}
+
+	if d.daemonPlugin != nil {
+		logrus.Infof("invoke pre-start hook in plugin")
+		if err = d.daemonPlugin.PreStartHook(); err != nil {
+			return err
+		}
+	}
 
 	imageMgr, err := internal.GenImageMgr(&d.config, d)
 	if err != nil {
@@ -117,12 +171,13 @@ func (d *Daemon) Run() error {
 	}
 
 	d.server = server.Server{
-		Config:       d.config,
-		ContainerMgr: containerMgr,
-		SystemMgr:    systemMgr,
-		ImageMgr:     imageMgr,
-		VolumeMgr:    volumeMgr,
-		NetworkMgr:   networkMgr,
+		Config:          d.config,
+		ContainerMgr:    containerMgr,
+		SystemMgr:       systemMgr,
+		ImageMgr:        imageMgr,
+		VolumeMgr:       volumeMgr,
+		NetworkMgr:      networkMgr,
+		ContainerPlugin: d.containerPlugin,
 	}
 
 	// init base network
@@ -150,11 +205,22 @@ func (d *Daemon) Run() error {
 		close(grpcServerCloseCh)
 	}()
 
+	streamServerCloseCh := make(chan struct{})
+	go func() {
+		if d.criMgr.StreamServerStart(); err != nil {
+			logrus.Errorf("failed to start stream server: %v", err)
+		}
+		close(streamServerCloseCh)
+	}()
+
 	// Stop pouchd if both server stopped.
 	<-httpServerCloseCh
 	logrus.Infof("HTTP server stopped")
 	<-grpcServerCloseCh
 	logrus.Infof("GRPC server stopped")
+	<-streamServerCloseCh
+	logrus.Infof("Stream server stopped")
+
 	return nil
 }
 
@@ -200,4 +266,20 @@ func (d *Daemon) MetaStore() *meta.Store {
 
 func (d *Daemon) networkInit(ctx context.Context) error {
 	return mode.NetworkModeInit(ctx, d.config.NetworkConfg, d.networkMgr)
+}
+
+// ContainerPlugin returns the container plugin fetched from shared file
+func (d *Daemon) ContainerPlugin() plugins.ContainerPlugin {
+	return d.containerPlugin
+}
+
+// ShutdownPlugin invoke pre-stop method in daemon plugin if exist
+func (d *Daemon) ShutdownPlugin() error {
+	if d.daemonPlugin != nil {
+		logrus.Infof("invoke pre-stop hook in plugin")
+		if err := d.daemonPlugin.PreStopHook(); err != nil {
+			logrus.Errorf("stop prehook execute error %v", err)
+		}
+	}
+	return nil
 }

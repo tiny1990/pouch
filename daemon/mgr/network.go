@@ -8,17 +8,19 @@ import (
 
 	apitypes "github.com/alibaba/pouch/apis/types"
 	"github.com/alibaba/pouch/daemon/config"
-	"github.com/alibaba/pouch/daemon/meta"
 	"github.com/alibaba/pouch/network"
 	"github.com/alibaba/pouch/network/types"
 	"github.com/alibaba/pouch/pkg/errtypes"
+	"github.com/alibaba/pouch/pkg/meta"
 	"github.com/alibaba/pouch/pkg/randomid"
 
 	netlog "github.com/Sirupsen/logrus"
+	"github.com/docker/go-connections/nat"
 	"github.com/docker/libnetwork"
 	nwconfig "github.com/docker/libnetwork/config"
 	"github.com/docker/libnetwork/netlabel"
 	"github.com/docker/libnetwork/options"
+	networktypes "github.com/docker/libnetwork/types"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
@@ -40,8 +42,8 @@ type NetworkMgr interface {
 	// EndpointCreate is used to create network endpoint.
 	EndpointCreate(ctx context.Context, endpoint *types.Endpoint) (string, error)
 
-	// EndpointRemove is used to create network endpoint.
-	EndpointRemove(ctx context.Context, name string) error
+	// EndpointRemove is used to remove network endpoint.
+	EndpointRemove(ctx context.Context, endpoint *types.Endpoint) error
 
 	// EndpointList returns all endpoints.
 	EndpointList(ctx context.Context) ([]*types.Endpoint, error)
@@ -177,6 +179,9 @@ func (nm *NetworkManager) EndpointCreate(ctx context.Context, endpoint *types.En
 	endpointConfig := endpoint.EndpointConfig
 
 	logrus.Debugf("create endpoint for container [%s] on network [%s]", containerID, network)
+	if networkConfig == nil || endpointConfig == nil {
+		return "", fmt.Errorf("networkConfig or endpointConfig can not be nil")
+	}
 
 	n, err := nm.controller.NetworkByName(network)
 	if err != nil {
@@ -235,13 +240,51 @@ func (nm *NetworkManager) EndpointCreate(ctx context.Context, endpoint *types.En
 	if epInfo.GatewayIPv6().To16() != nil {
 		endpointConfig.IPV6Gateway = epInfo.GatewayIPv6().String()
 	}
+	endpoint.ID = ep.ID()
+	endpointConfig.EndpointID = ep.ID()
+	endpointConfig.NetworkID = n.ID()
+
+	iface := epInfo.Iface()
+	if iface != nil {
+		if iface.Address() != nil {
+			mask, _ := iface.Address().Mask.Size()
+			endpointConfig.IPPrefixLen = int64(mask)
+			endpointConfig.IPAddress = iface.Address().String()
+		}
+
+		if iface.MacAddress() != nil {
+			endpointConfig.MacAddress = iface.MacAddress().String()
+		}
+	}
 
 	return endpointName, nil
 }
 
-// EndpointRemove is used to create network endpoint.
-func (nm *NetworkManager) EndpointRemove(ctx context.Context, name string) error {
-	// TODO
+// EndpointRemove is used to remove network endpoint.
+func (nm *NetworkManager) EndpointRemove(ctx context.Context, endpoint *types.Endpoint) error {
+	sid := endpoint.NetworkConfig.SandboxID
+	epConfig := endpoint.EndpointConfig
+
+	logrus.Debugf("remove endpoint: %s on network: %s", epConfig.EndpointID, endpoint.Name)
+
+	if sid == "" {
+		return nil
+	}
+
+	sb, err := nm.controller.SandboxByID(sid)
+	if err == nil {
+		if err := sb.Delete(); err != nil {
+			logrus.Errorf("failed to delete sandbox id: %s, err: %v", sid, err)
+			return err
+		}
+	} else if _, ok := err.(networktypes.NotFoundError); !ok {
+		logrus.Errorf("failed to get sandbox id: %s, err: %v", sid, err)
+		return fmt.Errorf("failed to get sandbox id: %s, err: %v", sid, err)
+	}
+
+	// clean endpoint configure data
+	nm.cleanEndpointConfig(epConfig)
+
 	return nil
 }
 
@@ -466,7 +509,77 @@ func (nm *NetworkManager) sandboxOptions(endpoint *types.Endpoint) ([]libnetwork
 	// TODO: secondary ip address
 	// TODO: parse extra hosts
 	// TODO: port mapping
+	var bindings = make(nat.PortMap)
+	if endpoint.PortBindings != nil {
+		for p, b := range endpoint.PortBindings {
+			bindings[nat.Port(p)] = []nat.PortBinding{}
+			for _, bb := range b {
+				bindings[nat.Port(p)] = append(bindings[nat.Port(p)], nat.PortBinding{
+					HostIP:   bb.HostIP,
+					HostPort: bb.HostPort,
+				})
+			}
+		}
+	}
+
+	portSpecs := endpoint.ExposedPorts
+	var ports = make([]nat.Port, len(portSpecs))
+	var i int
+	for p := range endpoint.ExposedPorts {
+		ports[i] = nat.Port(p)
+		i++
+	}
+	nat.SortPortMap(ports, bindings)
+
+	var (
+		exposeList []networktypes.TransportPort
+		pbList     []networktypes.PortBinding
+	)
+	for _, port := range ports {
+		expose := networktypes.TransportPort{}
+		expose.Proto = networktypes.ParseProtocol(port.Proto())
+		expose.Port = uint16(port.Int())
+		exposeList = append(exposeList, expose)
+
+		pb := networktypes.PortBinding{Port: expose.Port, Proto: expose.Proto}
+		binding := bindings[port]
+		for i := 0; i < len(binding); i++ {
+			pbCopy := pb.GetCopy()
+			newP, err := nat.NewPort(nat.SplitProtoPort(binding[i].HostPort))
+			var portStart, portEnd int
+			if err == nil {
+				portStart, portEnd, err = newP.Range()
+			}
+			if err != nil {
+				return nil, fmt.Errorf("failed to parsing HostPort value(%s):%v", binding[i].HostPort, err)
+			}
+			pbCopy.HostPort = uint16(portStart)
+			pbCopy.HostPortEnd = uint16(portEnd)
+			pbCopy.HostIP = net.ParseIP(binding[i].HostIP)
+			pbList = append(pbList, pbCopy)
+		}
+
+		if endpoint.PublishAllPorts && len(binding) == 0 {
+			pbList = append(pbList, pb)
+		}
+	}
+
+	sandboxOptions = append(sandboxOptions,
+		libnetwork.OptionPortMapping(pbList),
+		libnetwork.OptionExposedPorts(exposeList))
+
 	return sandboxOptions, nil
+}
+
+func (nm *NetworkManager) cleanEndpointConfig(epConfig *apitypes.EndpointSettings) {
+	epConfig.EndpointID = ""
+	epConfig.Gateway = ""
+	epConfig.IPAddress = ""
+	epConfig.IPPrefixLen = 0
+	epConfig.IPV6Gateway = ""
+	epConfig.GlobalIPV6Address = ""
+	epConfig.GlobalIPV6PrefixLen = 0
+	epConfig.MacAddress = ""
 }
 
 func joinOptions(epConfig *apitypes.EndpointSettings) ([]libnetwork.EndpointOption, error) {

@@ -7,6 +7,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/alibaba/pouch/apis/types"
 	"github.com/alibaba/pouch/daemon/containerio"
 	"github.com/alibaba/pouch/pkg/errtypes"
 
@@ -422,4 +423,49 @@ func (c *Client) listContainerStore(ctx context.Context) ([]string, error) {
 	}
 
 	return cs, nil
+}
+
+// UpdateResources updates the configurations of a container.
+func (c *Client) UpdateResources(ctx context.Context, id string, resources types.Resources) error {
+	if !c.lock.Trylock(id) {
+		return errtypes.ErrLockfailed
+	}
+	defer c.lock.Unlock(id)
+
+	pack, err := c.watch.get(id)
+	if err != nil {
+		return err
+	}
+
+	r, err := toLinuxResources(resources)
+	if err != nil {
+		return err
+	}
+
+	return pack.task.Update(ctx, containerd.WithResources(r))
+}
+
+// GetPidsForContainer returns s list of process IDs running in a container.
+func (c *Client) GetPidsForContainer(ctx context.Context, id string) ([]int, error) {
+	if !c.lock.Trylock(id) {
+		return nil, errtypes.ErrLockfailed
+	}
+	defer c.lock.Unlock(id)
+
+	var pids []int
+
+	pack, err := c.watch.get(id)
+	if err != nil {
+		return nil, err
+	}
+
+	processes, err := pack.task.Pids(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, ps := range processes {
+		pids = append(pids, int(ps.Pid))
+	}
+	return pids, nil
 }

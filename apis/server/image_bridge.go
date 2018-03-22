@@ -2,11 +2,15 @@ package server
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/alibaba/pouch/apis/metrics"
+	"github.com/alibaba/pouch/apis/types"
 	"github.com/alibaba/pouch/daemon/mgr"
 	"github.com/alibaba/pouch/pkg/httputils"
 
@@ -32,8 +36,17 @@ func (s *Server) pullImage(ctx context.Context, rw http.ResponseWriter, req *htt
 		metrics.ImagePullSummary.WithLabelValues(image + ":" + tag).Observe(metrics.SinceInMicroseconds(start))
 	}(time.Now())
 
+	// get registry auth from Request header
+	authStr := req.Header.Get("X-Registry-Auth")
+	authConfig := types.AuthConfig{}
+	if authStr != "" {
+		data := base64.NewDecoder(base64.URLEncoding, strings.NewReader(authStr))
+		if err := json.NewDecoder(data).Decode(&authConfig); err != nil {
+			return err
+		}
+	}
 	// Error information has be sent to client, so no need call resp.Write
-	if err := s.ImageMgr.PullImage(ctx, image, tag, rw); err != nil {
+	if err := s.ImageMgr.PullImage(ctx, image, tag, &authConfig, rw); err != nil {
 		logrus.Errorf("failed to pull image %s:%s: %v", image, tag, err)
 		return nil
 	}
@@ -86,7 +99,7 @@ func (s *Server) removeImage(ctx context.Context, rw http.ResponseWriter, req *h
 	}
 
 	containers, err := s.ContainerMgr.List(ctx, func(meta *mgr.ContainerMeta) bool {
-		return meta.Image == image.Name
+		return meta.Image == image.ID
 	}, &mgr.ContainerListOption{All: true})
 	if err != nil {
 		return err
@@ -94,14 +107,14 @@ func (s *Server) removeImage(ctx context.Context, rw http.ResponseWriter, req *h
 
 	isForce := httputils.BoolValue(req, "force")
 	if !isForce && len(containers) > 0 {
-		return fmt.Errorf("Unable to remove the image %q (must force) - container %s is using this image", image.Name, containers[0].ID)
+		return fmt.Errorf("Unable to remove the image %q (must force) - container %s is using this image", image.ID, containers[0].ID)
 	}
 
 	option := &mgr.ImageRemoveOption{
 		Force: isForce,
 	}
 
-	if err := s.ImageMgr.RemoveImage(ctx, image, option); err != nil {
+	if err := s.ImageMgr.RemoveImage(ctx, image, name, option); err != nil {
 		return err
 	}
 

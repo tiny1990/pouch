@@ -24,18 +24,26 @@ pouch is a client side tool pouch to interact with daemon side process pouchd. F
 * [pouch gen-doc](pouch_gen-doc.md)	 - Generate docs
 * [pouch image](pouch_image.md)	 - Manage image
 * [pouch images](pouch_images.md)	 - List all images
+* [pouch info](pouch_info.md)	 - Display system-wide information
 * [pouch inspect](pouch_inspect.md)	 - Get the detailed information of container
+* [pouch login](pouch_login.md)	 - Login to a registry
+* [pouch logout](pouch_logout.md)	 - Logout from a registry
+* [pouch logs](pouch_logs.md)	 - Print a container's logs
 * [pouch network](pouch_network.md)	 - Manage pouch networks
 * [pouch pause](pouch_pause.md)	 - Pause a running container
 * [pouch ps](pouch_ps.md)	 - List containers
 * [pouch pull](pouch_pull.md)	 - Pull an image from registry
 * [pouch rename](pouch_rename.md)	 - Rename a container with newName
+* [pouch restart](pouch_restart.md)	 - restart one or more containers
 * [pouch rm](pouch_rm.md)	 - Remove one or more containers
 * [pouch rmi](pouch_rmi.md)	 - Remove one or more images by reference
 * [pouch run](pouch_run.md)	 - Create a new container and start it
 * [pouch start](pouch_start.md)	 - Start a created or stopped container
 * [pouch stop](pouch_stop.md)	 - Stop a running container
+* [pouch top](pouch_top.md)	 - Display the running processes of a container
 * [pouch unpause](pouch_unpause.md)	 - Unpause a paused container
+* [pouch update](pouch_update.md)	 - Update the configurations of a container
+* [pouch upgrade](pouch_upgrade.md)	 - Upgrade a container with new image and args
 * [pouch version](pouch_version.md)	 - Print versions about Pouch CLI and Pouchd
 * [pouch volume](pouch_volume.md)	 - Manage pouch volumes
 

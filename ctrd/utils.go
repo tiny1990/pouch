@@ -27,7 +27,7 @@ func NewDefaultSpec(ctx context.Context, id string) (*specs.Spec, error) {
 	return oci.GenerateSpec(ctx, nil, &containers.Container{ID: id})
 }
 
-func resolver() (remotes.Resolver, error) {
+func resolver(authConfig *types.AuthConfig) (remotes.Resolver, error) {
 	var (
 		// TODO
 		username  = ""
@@ -36,6 +36,11 @@ func resolver() (remotes.Resolver, error) {
 		refresh   = ""
 		insecure  = false
 	)
+
+	if authConfig != nil {
+		username = authConfig.Username
+		secret = authConfig.Password
+	}
 
 	// FIXME
 	_ = refresh
@@ -122,4 +127,37 @@ func ociImageToPouchImage(ociImage v1.Image) (types.ImageInfo, error) {
 		RootFS:       &rootFs,
 	}
 	return imageInfo, nil
+}
+
+// toLinuxResources transfers Pouch Resources to LinuxResources.
+func toLinuxResources(resources types.Resources) (*specs.LinuxResources, error) {
+	r := &specs.LinuxResources{}
+
+	// toLinuxBlockIO
+	r.BlockIO = &specs.LinuxBlockIO{
+		Weight: &resources.BlkioWeight,
+	}
+
+	// toLinuxCPU
+	shares := uint64(resources.CPUShares)
+	r.CPU = &specs.LinuxCPU{
+		Cpus:   resources.CpusetCpus,
+		Mems:   resources.CpusetMems,
+		Shares: &shares,
+	}
+
+	// toLinuxMemory
+	var swappiness uint64
+	if resources.MemorySwappiness != nil {
+		swappiness = uint64(*(resources.MemorySwappiness))
+	}
+	r.Memory = &specs.LinuxMemory{
+		Limit:      &resources.Memory,
+		Swap:       &resources.MemorySwap,
+		Swappiness: &swappiness,
+	}
+
+	// TODO: add more fields.
+
+	return r, nil
 }

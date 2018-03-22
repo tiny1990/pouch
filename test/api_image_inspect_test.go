@@ -1,11 +1,13 @@
 package main
 
 import (
+	"github.com/alibaba/pouch/apis/types"
+	"github.com/alibaba/pouch/test/command"
 	"github.com/alibaba/pouch/test/environment"
 	"github.com/alibaba/pouch/test/request"
 
-	"github.com/alibaba/pouch/apis/types"
 	"github.com/go-check/check"
+	"github.com/gotestyourself/gotestyourself/icmd"
 )
 
 // APIImageInspectSuite is the test suite for image inspect API.
@@ -18,6 +20,7 @@ func init() {
 // SetUpTest does common setup in the beginning of each test.
 func (suite *APIImageInspectSuite) SetUpTest(c *check.C) {
 	SkipIfFalse(c, environment.IsLinux)
+	command.PouchRun("pull", busyboxImage).Assert(c, icmd.Success)
 }
 
 // TestImageInspectOk tests inspecting images is OK.
@@ -31,13 +34,14 @@ func (suite *APIImageInspectSuite) TestImageInspectOk(c *check.C) {
 	c.Assert(err, check.IsNil)
 
 	// TODO: More specific check is needed
+	repoTag := got.RepoTags[0]
+	repoDigest := got.RepoDigests[0]
 	c.Assert(got.Config, check.NotNil)
-	c.Assert(got.Name, check.Equals, busyboxImage)
 	c.Assert(got.ID, check.NotNil)
 	c.Assert(got.CreatedAt, check.NotNil)
-	c.Assert(got.Digest, check.Matches, "sha256.*")
+	c.Assert(repoTag, check.Equals, busyboxImage)
 	c.Assert(got.Size, check.NotNil)
-	c.Assert(got.Tag, check.Equals, "latest")
+	c.Assert(repoDigest, check.Matches, ".*sha256.*")
 }
 
 // TestImageInspectNotFound tests inspecting non-existing images.

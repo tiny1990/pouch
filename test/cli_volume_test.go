@@ -1,16 +1,20 @@
 package main
 
 import (
+	"encoding/json"
+	"fmt"
 	"runtime"
 	"strings"
 
+	"github.com/alibaba/pouch/apis/types"
 	"github.com/alibaba/pouch/test/command"
 	"github.com/alibaba/pouch/test/environment"
+
 	"github.com/go-check/check"
 	"github.com/gotestyourself/gotestyourself/icmd"
 )
 
-// PouchVolumeSuite is the test suite fo volume CLI.
+// PouchVolumeSuite is the test suite for volume CLI.
 type PouchVolumeSuite struct{}
 
 func init() {
@@ -41,7 +45,9 @@ func (suite *PouchVolumeSuite) TestVolumeWorks(c *check.C) {
 		ExitCode: 1,
 		Err:      "No such file or directory",
 	}
-	icmd.RunCommand("stat", "/mnt/local/"+funcname).Compare(expct)
+	err := icmd.RunCommand("stat", "/mnt/local/"+funcname).Compare(expct)
+	c.Assert(err, check.IsNil)
+
 }
 
 // TestVolumeWorks tests "pouch volume" work.
@@ -103,7 +109,9 @@ func (suite *PouchVolumeSuite) TestVolumeCreateWithMountPointExitsFile(c *check.
 	}
 
 	icmd.RunCommand("touch", "/tmp/"+funcname)
-	command.PouchRun("volume", "create", "--name", funcname, "--driver", "local", "-o", "mount=/tmp").Compare(expct)
+	err := command.PouchRun("volume", "create", "--name", funcname, "--driver", "local", "-o", "mount=/tmp").Compare(expct)
+	c.Assert(err, check.IsNil)
+
 	command.PouchRun("volume", "remove", funcname)
 }
 
@@ -121,7 +129,9 @@ func (suite *PouchVolumeSuite) TestVolumeCreateWrongDriver(c *check.C) {
 		Err:      "not found",
 	}
 
-	command.PouchRun("volume", "create", "--name", funcname, "--driver", "wrongdriver").Compare(expct)
+	err := command.PouchRun("volume", "create", "--name", funcname, "--driver", "wrongdriver").Compare(expct)
+	c.Assert(err, check.IsNil)
+
 	command.PouchRun("volume", "remove", funcname)
 }
 
@@ -149,4 +159,47 @@ func (suite *PouchVolumeSuite) TestVolumeCreateWithSelector(c *check.C) {
 
 	command.PouchRun("volume", "create", "--name", funcname, "--selector", "test=foo").Assert(c, icmd.Success)
 	command.PouchRun("volume", "remove", funcname)
+}
+
+// TestVolumeInspectFormat tests the inspect format of volume works.
+func (suite *PouchVolumeSuite) TestVolumeInspectFormat(c *check.C) {
+	pc, _, _, _ := runtime.Caller(0)
+	tmpname := strings.Split(runtime.FuncForPC(pc).Name(), ".")
+	var funcname string
+	for i := range tmpname {
+		funcname = tmpname[i]
+	}
+
+	command.PouchRun("volume", "create", "--name", funcname).Assert(c, icmd.Success)
+	defer command.PouchRun("volume", "remove", funcname)
+
+	output := command.PouchRun("volume", "inspect", funcname).Stdout()
+	result := &types.ContainerJSON{}
+	if err := json.Unmarshal([]byte(output), result); err != nil {
+		c.Errorf("failed to decode inspect output: %v", err)
+	}
+
+	output = command.PouchRun("volume", "inspect", "-f", "{{.Name}}", funcname).Stdout()
+	c.Assert(output, check.Equals, fmt.Sprintf("%s\n", funcname))
+
+}
+
+// TestVolumeUsingByContainer tests the inspect format of volume works.
+func (suite *PouchVolumeSuite) TestVolumeUsingByContainer(c *check.C) {
+	pc, _, _, _ := runtime.Caller(0)
+	tmpname := strings.Split(runtime.FuncForPC(pc).Name(), ".")
+	var funcname string
+	for i := range tmpname {
+		funcname = tmpname[i]
+	}
+
+	volumeName := "volume_" + funcname
+	command.PouchRun("volume", "create", "--name", volumeName).Assert(c, icmd.Success)
+	command.PouchRun("run", "-d", "-v", volumeName+":/mnt", "--name", funcname, busyboxImage, "top").Assert(c, icmd.Success)
+
+	ret := command.PouchRun("volume", "rm", volumeName)
+	c.Assert(ret.Error, check.NotNil)
+
+	command.PouchRun("rm", "-f", funcname).Assert(c, icmd.Success)
+	command.PouchRun("volume", "rm", volumeName).Assert(c, icmd.Success)
 }

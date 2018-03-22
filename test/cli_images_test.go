@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"strings"
 
 	"github.com/alibaba/pouch/apis/types"
@@ -9,12 +11,14 @@ import (
 	"github.com/alibaba/pouch/pkg/utils"
 	"github.com/alibaba/pouch/test/command"
 	"github.com/alibaba/pouch/test/environment"
+	"github.com/alibaba/pouch/test/util"
+
 	"github.com/go-check/check"
 	"github.com/gotestyourself/gotestyourself/icmd"
 	"github.com/pkg/errors"
 )
 
-// PouchImagesSuite is the test suite fo help CLI.
+// PouchImagesSuite is the test suite for images CLI.
 type PouchImagesSuite struct{}
 
 func init() {
@@ -24,6 +28,8 @@ func init() {
 // SetUpSuite does common setup in the beginning of each test suite.
 func (suite *PouchImagesSuite) SetUpSuite(c *check.C) {
 	SkipIfFalse(c, environment.IsLinux)
+
+	environment.PruneAllContainers(apiClient)
 
 	command.PouchRun("pull", busyboxImage).Assert(c, icmd.Success)
 }
@@ -54,7 +60,7 @@ func (suite *PouchImagesSuite) TestImagesWorks(c *check.C) {
 	{
 		res := command.PouchRun("images", "--digest").Assert(c, icmd.Success)
 		items := imagesListToKV(res.Combined())[busyboxImage]
-		c.Assert(items[2], check.Equals, image.Digest)
+		c.Assert(items[2], check.Equals, strings.TrimPrefix(image.RepoDigests[0], "registry.hub.docker.com/library/busybox@"))
 	}
 }
 
@@ -84,9 +90,35 @@ func getImageInfo(apiClient client.ImageAPIClient, name string) (types.ImageInfo
 	}
 
 	for _, img := range images {
-		if img.Name == name {
+		if img.RepoTags[0] == name {
 			return img, nil
 		}
 	}
 	return types.ImageInfo{}, errors.Errorf("image %s not found", name)
+}
+
+// TestInspectImage is to verify the format flag of image inspect command.
+func (suite *PouchImagesSuite) TestInspectImage(c *check.C) {
+	output := command.PouchRun("image", "inspect", busyboxImage).Stdout()
+	result := &types.ContainerJSON{}
+	if err := json.Unmarshal([]byte(output), result); err != nil {
+		c.Errorf("failed to decode inspect output: %v", err)
+	}
+
+	// inspect image name
+	output = command.PouchRun("image", "inspect", "-f", "{{.RepoTags}}", busyboxImage).Stdout()
+	c.Assert(output, check.Equals, fmt.Sprintf("[%s]\n", busyboxImage))
+}
+
+// TestLoginAndLogout is to test login and logout command
+func (suite *PouchImagesSuite) TestLoginAndLogout(c *check.C) {
+	SkipIfFalse(c, environment.IsHubConnected)
+
+	// test login a defined registry
+	output := command.PouchRun("login", "-u", testHubUser, "-p", testHubPasswd, testHubAddress).Stdout()
+	c.Assert(util.PartialEqual(output, "Login Succeeded"), check.IsNil)
+
+	// test logout a defined registry
+	output = command.PouchRun("logout", testHubAddress).Stdout()
+	c.Assert(util.PartialEqual(output, "Remove login credential for registry"), check.IsNil)
 }

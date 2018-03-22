@@ -3,8 +3,6 @@ package reference
 import (
 	"errors"
 	"strings"
-
-	digest "github.com/opencontainers/go-digest"
 )
 
 var (
@@ -17,10 +15,6 @@ var (
 
 // Parse parses ref into Reference.
 func Parse(ref string) (Reference, error) {
-	if _, err := digest.Parse(ref); err == nil {
-		return digestReference(ref), nil
-	}
-
 	return ParseNamedReference(ref)
 }
 
@@ -28,6 +22,16 @@ func Parse(ref string) (Reference, error) {
 func ParseNamedReference(ref string) (Named, error) {
 	if ok := regRef.MatchString(ref); !ok {
 		return nil, ErrInvalid
+	}
+
+	// if ref contains digest information
+	if loc := regDigest.FindStringIndex(ref); loc != nil {
+		name, digest := ref[:loc[0]], ref[loc[0]+1:]
+
+		return digestReference{
+			Named:  namedReference{name},
+			digest: digest,
+		}, nil
 	}
 
 	// if ref contains tag information
@@ -55,9 +59,10 @@ func WithDefaultTagIfMissing(named Named) Named {
 	return named
 }
 
-// Domain retrieves domain information.
+// Domain retrieves domain information. Domain include registry address and
+// repository namespace, like registry.hub.docker.com/library/ubuntu.
 func Domain(named string) (string, bool) {
-	i := strings.IndexRune(named, '/')
+	i := strings.LastIndexByte(named, '/')
 
 	// FIXME: The domain should contain the . or :, how to handle the case
 	// which image name contains . or :?

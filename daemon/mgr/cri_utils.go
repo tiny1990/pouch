@@ -3,6 +3,10 @@ package mgr
 import (
 	"bytes"
 	"fmt"
+	"io"
+	"io/ioutil"
+	"os"
+	"path"
 	"strconv"
 	"strings"
 	"time"
@@ -91,6 +95,18 @@ func extractLabels(input map[string]string) (map[string]string, map[string]strin
 	return labels, annotations
 }
 
+// generateContainerMounts sets up necessary container mounts including /dev/shm, /etc/hosts
+// and /etc/resolv.conf.
+func generateContainerMounts(sandboxRootDir string) []string {
+	// TODO: more attr and check whether these bindings is included in cri mounts.
+	result := []string{}
+	hostPath := path.Join(sandboxRootDir, "resolv.conf")
+	containerPath := resolvConfPath
+	result = append(result, fmt.Sprintf("%s:%s", hostPath, containerPath))
+
+	return result
+}
+
 func generateMountBindings(mounts []*runtime.Mount) []string {
 	result := make([]string, 0, len(mounts))
 	for _, m := range mounts {
@@ -157,10 +173,57 @@ func parseSandboxName(name string) (*runtime.PodSandboxMetadata, error) {
 	}, nil
 }
 
+func modifySandboxNamespaceOptions(nsOpts *runtime.NamespaceOption, hostConfig *apitypes.HostConfig) {
+	if nsOpts == nil {
+		return
+	}
+	if nsOpts.HostPid {
+		hostConfig.PidMode = namespaceModeHost
+	}
+	if nsOpts.HostIpc {
+		hostConfig.IpcMode = namespaceModeHost
+	}
+	if nsOpts.HostNetwork {
+		hostConfig.NetworkMode = namespaceModeHost
+	}
+}
+
+func applySandboxSecurityContext(lc *runtime.LinuxPodSandboxConfig, config *apitypes.ContainerConfig, hc *apitypes.HostConfig) error {
+	if lc == nil {
+		return nil
+	}
+
+	var sc *runtime.LinuxContainerSecurityContext
+	if lc.SecurityContext != nil {
+		sc = &runtime.LinuxContainerSecurityContext{
+			SupplementalGroups: lc.SecurityContext.SupplementalGroups,
+			RunAsUser:          lc.SecurityContext.RunAsUser,
+			ReadonlyRootfs:     lc.SecurityContext.ReadonlyRootfs,
+			SelinuxOptions:     lc.SecurityContext.SelinuxOptions,
+			NamespaceOptions:   lc.SecurityContext.NamespaceOptions,
+		}
+	}
+
+	modifyContainerConfig(sc, config)
+	err := modifyHostConfig(sc, hc)
+	if err != nil {
+		return err
+	}
+	modifySandboxNamespaceOptions(sc.GetNamespaceOptions(), hc)
+
+	return nil
+}
+
 // applySandboxLinuxOptions applies LinuxPodSandboxConfig to pouch's HostConfig and ContainerCreateConfig.
 func applySandboxLinuxOptions(hc *apitypes.HostConfig, lc *runtime.LinuxPodSandboxConfig, createConfig *apitypes.ContainerCreateConfig, image string) error {
 	if lc == nil {
 		return nil
+	}
+
+	// Apply security context.
+	err := applySandboxSecurityContext(lc, &createConfig.ContainerConfig, hc)
+	if err != nil {
+		return err
 	}
 
 	// Set sysctls.
@@ -253,6 +316,75 @@ func filterCRISandboxes(sandboxes []*runtime.PodSandbox, filter *runtime.PodSand
 	return filtered
 }
 
+// parseDNSOptions parse DNS options into resolv.conf format content,
+// if none option is specified, will return empty with no error.
+func parseDNSOptions(servers, searches, options []string) (string, error) {
+	resolvContent := ""
+
+	if len(searches) > 0 {
+		resolvContent += fmt.Sprintf("search %s\n", strings.Join(searches, " "))
+	}
+
+	if len(servers) > 0 {
+		resolvContent += fmt.Sprintf("nameserver %s\n", strings.Join(servers, "\nnameserver "))
+	}
+
+	if len(options) > 0 {
+		resolvContent += fmt.Sprintf("options %s\n", strings.Join(options, " "))
+	}
+
+	return resolvContent, nil
+}
+
+// copyFile copys src file to dest file
+func copyFile(src, dest string, perm os.FileMode) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+
+	out, err := os.OpenFile(dest, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, perm)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+
+	_, err = io.Copy(out, in)
+	return err
+}
+
+// setupSandboxFiles sets up necessary sandbox files.
+func setupSandboxFiles(sandboxRootDir string, config *runtime.PodSandboxConfig) error {
+	// Set DNS options. Maintain a resolv.conf for the sandbox.
+	var resolvContent string
+	resolvPath := path.Join(sandboxRootDir, "resolv.conf")
+
+	var err error
+	dnsConfig := config.GetDnsConfig()
+	if dnsConfig != nil {
+		resolvContent, err = parseDNSOptions(dnsConfig.Servers, dnsConfig.Searches, dnsConfig.Options)
+		if err != nil {
+			return fmt.Errorf("failed to parse sandbox DNSConfig %+v: %v", dnsConfig, err)
+		}
+	}
+
+	if resolvContent == "" {
+		// Copy host's resolv.conf to resolvPath.
+		err = copyFile(resolvConfPath, resolvPath, 0644)
+		if err != nil {
+			return fmt.Errorf("failed to copy host's resolv.conf to %q: %v", resolvPath, err)
+		}
+	} else {
+		err = ioutil.WriteFile(resolvPath, []byte(resolvContent), 0644)
+		if err != nil {
+			return fmt.Errorf("failed to write resolv content to %q: %v", resolvPath, err)
+		}
+	}
+
+	return nil
+}
+
 // Container related tool functions.
 
 func makeContainerName(s *runtime.PodSandboxConfig, c *runtime.ContainerConfig) string {
@@ -292,10 +424,36 @@ func parseContainerName(name string) (*runtime.ContainerMetadata, error) {
 func modifyContainerNamespaceOptions(nsOpts *runtime.NamespaceOption, podSandboxID string, hostConfig *apitypes.HostConfig) {
 	sandboxNSMode := fmt.Sprintf("container:%v", podSandboxID)
 
-	hostConfig.PidMode = sandboxNSMode
-	hostConfig.NetworkMode = sandboxNSMode
-	hostConfig.IpcMode = sandboxNSMode
-	hostConfig.UTSMode = sandboxNSMode
+	if nsOpts == nil {
+		hostConfig.PidMode = sandboxNSMode
+		hostConfig.IpcMode = sandboxNSMode
+		hostConfig.NetworkMode = sandboxNSMode
+		return
+	}
+
+	for _, n := range []struct {
+		hostMode bool
+		nsMode   *string
+	}{
+		{
+			hostMode: nsOpts.HostPid,
+			nsMode:   &hostConfig.PidMode,
+		},
+		{
+			hostMode: nsOpts.HostIpc,
+			nsMode:   &hostConfig.IpcMode,
+		},
+		{
+			hostMode: nsOpts.HostNetwork,
+			nsMode:   &hostConfig.NetworkMode,
+		},
+	} {
+		if n.hostMode {
+			*n.nsMode = namespaceModeHost
+		} else {
+			*n.nsMode = sandboxNSMode
+		}
+	}
 }
 
 // getAppArmorSecurityOpts gets appArmor options from container config.
@@ -344,6 +502,11 @@ func getSeccompSecurityOpts(sc *runtime.LinuxContainerSecurityContext) ([]string
 func modifyHostConfig(sc *runtime.LinuxContainerSecurityContext, hostConfig *apitypes.HostConfig) error {
 	if sc == nil {
 		return nil
+	}
+
+	// Apply supplemental groups.
+	for _, group := range sc.SupplementalGroups {
+		hostConfig.GroupAdd = append(hostConfig.GroupAdd, strconv.FormatInt(group, 10))
 	}
 
 	// TODO: apply other security options.
@@ -486,26 +649,20 @@ func filterCRIContainers(containers []*runtime.Container, filter *runtime.Contai
 }
 
 // containerNetns returns the network namespace of the given container.
-func containerNetns(container *ContainerMeta) (string, error) {
+func containerNetns(container *ContainerMeta) string {
 	pid := container.State.Pid
-	if pid == 0 {
-		// Pouch reports pid 0 for an exited container.
-		return "", fmt.Errorf("can't find network namespace for the terminated container %q", container.ID)
+	if pid == -1 {
+		// Pouch reports pid -1 for an exited container.
+		return ""
 	}
 
-	return fmt.Sprintf("/proc/%v/ns/net", pid), nil
+	return fmt.Sprintf("/proc/%v/ns/net", pid)
 }
 
 // Image related tool functions.
 
 // imageToCriImage converts pouch image API to CRI image API.
 func imageToCriImage(image *apitypes.ImageInfo) (*runtime.Image, error) {
-	namedRef, err := reference.ParseNamedReference(image.Name)
-	if err != nil {
-		return nil, err
-	}
-	taggedRef := reference.WithDefaultTagIfMissing(namedRef).(reference.Tagged)
-
 	uid := &runtime.Int64Value{}
 	imageUID, username := getUserFromImageUser(image.Config.User)
 	if imageUID != nil {
@@ -515,9 +672,9 @@ func imageToCriImage(image *apitypes.ImageInfo) (*runtime.Image, error) {
 	size := uint64(image.Size)
 	// TODO: improve type ImageInfo to include RepoTags and RepoDigests.
 	return &runtime.Image{
-		Id:          image.Digest,
-		RepoTags:    []string{taggedRef.String()},
-		RepoDigests: []string{fmt.Sprintf("%s@%s", taggedRef.Name(), image.Digest)},
+		Id:          image.ID,
+		RepoTags:    image.RepoTags,
+		RepoDigests: image.RepoDigests,
 		Size_:       size,
 		Uid:         uid,
 		Username:    username,
@@ -538,7 +695,7 @@ func (c *CriManager) ensureSandboxImageExists(ctx context.Context, image string)
 	}
 	taggedRef := reference.WithDefaultTagIfMissing(namedRef).(reference.Tagged)
 
-	err = c.ImageMgr.PullImage(ctx, taggedRef.Name(), taggedRef.Tag(), bytes.NewBuffer([]byte{}))
+	err = c.ImageMgr.PullImage(ctx, taggedRef.Name(), taggedRef.Tag(), nil, bytes.NewBuffer([]byte{}))
 	if err != nil {
 		return fmt.Errorf("pull sandbox image %q failed: %v", image, err)
 	}

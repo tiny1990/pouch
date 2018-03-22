@@ -58,7 +58,7 @@ vet: # run go vet
 	@test -z "$$(./hack/build vet)"
 
 .PHONY: unit-test
-unit-test: pre ## run go test
+unit-test: pre modules ## run go test
 	@echo $@
 	@./hack/build unit-test
 
@@ -69,6 +69,7 @@ validate-swagger: ## run swagger validate
 
 .PHONY: modules
 modules:
+	@./hack/module --clean
 	@./hack/module --add-volume=github.com/alibaba/pouch/volume/modules/ceph
 	@./hack/module --add-volume=github.com/alibaba/pouch/volume/modules/tmpfs
 	@./hack/module --add-volume=github.com/alibaba/pouch/volume/modules/local

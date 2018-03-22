@@ -12,11 +12,85 @@ You can install Pouch automatically on your machine with very few steps. Current
 
 ### Ubuntu
 
-To be added.
+To install Pouch, you need a maintained version of Ubuntu 16.04 (Xenial LTS). Archived versions aren’t supported or tested.
+
+Pouch is conflict with Docker, so you must uninstall Docker before installing Pouch. 
+
+**Prerequisites**
+
+Pouch supports lxcfs to provide strong isolation, so you should install lxcfs firstly. By default, lxcfs is enabled.
+ 
+ ```bash
+sudo apt-get install lxcfs
+```
+
+Install packages to allow 'apt' to use a repository over HTTPS:
+                                   
+```bash
+sudo apt-get install curl apt-transport-https ca-certificates software-properties-common
+``` 
+
+**1. Add Pouch's official GPG key**
+
+```bash
+curl -fsSL http://mirrors.aliyun.com/opsx/pouch/linux/debian/opsx@service.alibaba.com.gpg.key | sudo apt-key add -
+```
+
+Verify that you now have the key with the fingerprint `B615 DDD7 90C7 0912 582D  DC2D D7AE A5ED 439A E9EC`, by searching for the last 8 characters of the fingerprint.
+
+```bash
+$ apt-key fingerprint 439AE9EC
+
+pub   2048R/439AE9EC 2018-01-31
+      Key fingerprint = B615 DDD7 90C7 0912 582D  DC2D D7AE A5ED 439A E9EC
+uid                  Pouch Release <pouch-dev@list.alibaba-inc.com>
+sub   2048R/B3D2A915 2018-01-31
+```
+
+**2. Set up the pouch repository**
+
+Before you install Pouch for the first time on a new host machine, you need to set up the Pouch repository. We enabled `stabel` repository by default, you always need the `stable` repository. To add the `test` repository, add the word `test` after the word `stable` in the command line below. Afterward, you can install and update Pouch from the repository.
+
+```bash
+sudo add-apt-repository "deb http://mirrors.aliyun.com/opsx/pouch/linux/debian/ pouch stable"
+```
+
+**3. Install pouch**
+
+Install the latest version of Pouch. 
+
+```bash
+# update the apt package index 
+sudo apt-get update
+
+sudo apt-get install pouch
+```
+
+After installing Pouch, the `pouch` group is created, but no users are added to the group.
+
+**4. Start pouch**
+
+```bash
+sudo service pouch start
+```
+
+Afterwards, you can pull an image and run Pouch containers.
+
+**5. Uninstall pouch**
+
+```bash
+sudo apt-get purge pouch
+```
+
+After uninstalling Pouch, images, containers, volumes, or customized configuration files on your host are not automatically removed. To delete all images, containers and volumes, execute the following command:
+
+```bash
+sudo rm -rf /var/lib/pouch
+```
 
 ### CentOS
 
-To install Pouch, you need a maintained version of CentOS 7 Archived versions aren’t supported or tested.
+To install Pouch, you need a maintained version of CentOS 7. Archived versions aren’t supported or tested.
 
 We have put rpm package to Aliyun mirrors, you can install pouch using Pouch repository. If you install Pouch for the first on a new host machine, you need to set up the Pouch repository. Then, you can install and update Pouch from repository.
 
@@ -33,10 +107,19 @@ sudo yum install -y yum-utils
 Use the following command to add Pouch repository.
 
 ```bash
-sudo yum-config-manager \
-    --add-repo \
-    http://mirrors.aliyun.com/opsx/opsx-centos7.repo
+sudo yum-config-manager --add-repo http://mirrors.aliyun.com/opsx/opsx-centos7.repo
 sudo yum update
+```
+
+Note: The above command set up the `stable` repository, you can enable `test` repository by the following command.
+
+```bash
+sudo yum-config-manager --enable pouch-test
+```
+You can disable the `test` repository by running the `yum-config-manager` command with the `--disable` flag. To re-enable it, use the `--enable` flag. The following command disables the test repository.
+
+```bash
+sudo yum-config-manager --disable pouch-test
 ```
 
 **3. Install pouch**
@@ -106,7 +189,7 @@ $ mv /usr/local/bin/runc.amd64 /usr/local/bin/runc
 
 If you wish to experience hypervisor-based virtualization additionally, you will still need to install [runV](https://github.com/hyperhq/runv).
 
-More guide on experiencing Pouch with runV including runv Installation, please refer to [pouch run with runv guide](docs/pouch_with_runV.md).
+More guide on experiencing Pouch with runV including runv Installation, please refer to [pouch run with runv guide](docs/features/pouch_with_runV.md).
 
 ### Pouch Build and Installation
 

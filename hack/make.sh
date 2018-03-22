@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -e
+set -ex
 
 # This script is to build pouch binaries and execute pouch tests.
 
@@ -20,7 +20,7 @@ function install_pouch ()
 
 	# install runc
 	echo "Download and install runc."
-	wget --quiet https://github.com/opencontainers/runc/releases/download/v1.0.0-rc4/runc.amd64 -P /usr/local/bin
+	wget --quiet https://github.com/alibaba/runc/releases/download/v1.0.0-rc4-1/runc.amd64 -P /usr/local/bin
 	chmod +x /usr/local/bin/runc.amd64
 	mv /usr/local/bin/runc.amd64 /usr/local/bin/runc
 
@@ -60,6 +60,13 @@ function install_pouch ()
 	fi
 }
 
+# Install dumb-init by downloading the binary.
+function install_dumb_init
+{
+    wget -O /usr/bin/dumb-init https://github.com/Yelp/dumb-init/releases/download/v1.2.1/dumb-init_1.2.1_amd64 || return 1
+    chmod +x /usr/bin/dumb-init
+}
+
 function target()
 {
 	case $1 in
@@ -67,8 +74,10 @@ function target()
 		docker run --rm -v $(pwd):$SOURCEDIR $IMAGE bash -c "make check"
 		;;
 	build)
-		docker run --rm -v $(pwd):$SOURCEDIR $IMAGE bash -c "make build"
-		install_pouch
+		docker run --rm -v $(pwd):$SOURCEDIR $IMAGE bash -c "make build"  >$TMP/build.log ||
+		    { echo "make build log:"; cat $TMP/build.log; return 1; }
+		install_pouch  >$TMP/install.log ||
+		    { echo "install pouch log:"; cat $TMP/install.log; return 1; }
 		;;
 	unit-test)
 		docker run --rm -v $(pwd):$SOURCEDIR $IMAGE bash -c "make unit-test"
@@ -78,6 +87,8 @@ function target()
 		env PATH=$GOROOT/bin:$PATH $SOURCEDIR/hack/cri-test/test-cri.sh
 		;;
 	integration-test)
+
+	    install_dumb_init || echo "Warning: dumb-init install failed! rich container related tests will be skipped"
 		docker run --rm -v $(pwd):$SOURCEDIR $IMAGE bash -c "cd test && go test -c -o integration-test"
 
 		if [[ $SOURCEDIR != $DIR ]];then
@@ -118,7 +129,7 @@ function target()
 		pouch version
 
 		# If test is failed, print pouch daemon log.
-		$DIR/test/integration-test -check.v || { echo "pouch daemon log:"; cat $TMP/log; return 1; } 
+		$DIR/test/integration-test -test.v -check.v || { echo "pouch daemon log:"; cat $TMP/log; return 1; } 
 		;;
 	*)
 		echo "no such target: $target"
@@ -130,7 +141,7 @@ function target()
 
 function main ()
 {
-	docker build --quiet -t $IMAGE .
+	docker build --quiet -t $IMAGE . 
 
 	if [[ $# < 1 ]]; then
 		targets="check build unit-test integration-test"
