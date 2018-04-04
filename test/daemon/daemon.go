@@ -41,12 +41,22 @@ type Config struct {
 	ContainerdAddr string
 
 	ListenCri string
+
 	// pid of pouchd
 	Pid int
+
+	// timeout for starting daemon
+	timeout int64
 }
 
 // DConfig is the global variable used to pouch daemon test.
 var DConfig Config
+
+func init() {
+	DConfig.Args = make([]string, 0, 1)
+	DConfig.Listen = make([]string, 0, 1)
+	DConfig.timeout = 15
+}
 
 // NewConfig initialize the DConfig with default value.
 func NewConfig() Config {
@@ -56,17 +66,20 @@ func NewConfig() Config {
 	result.LogPath = DaemonLog
 
 	result.Args = make([]string, 0, 1)
+	result.Listen = make([]string, 0, 1)
+
 	result.Args = append(result.Args, "--listen="+Listen)
 	result.Args = append(result.Args, "--home-dir="+HomeDir)
 	result.Args = append(result.Args, "--containerd="+ContainerdAdd)
 	result.Args = append(result.Args, "--listen-cri="+ListenCRI)
 
-	result.Listen = make([]string, 0, 1)
 	result.Listen = append(result.Listen, Listen)
 
 	result.HomeDir = HomeDir
 	result.ContainerdAddr = ContainerdAdd
 	result.ListenCri = ListenCRI
+
+	result.timeout = 15
 
 	return result
 }
@@ -122,10 +135,11 @@ func (d *Config) StartDaemon() error {
 		close(wait)
 	}()
 
-	if util.WaitTimeout(time.Second*5, d.IsDaemonUp) == false {
+	if util.WaitTimeout(time.Duration(d.timeout)*time.Second, d.IsDaemonUp) == false {
 		d.DumpLog()
 		d.KillDaemon()
-		return fmt.Errorf("failed to launch pouchd within 5s")
+		fmt.Printf("Failed to launch pouchd:%v\n", d.Args)
+		return fmt.Errorf("failed to launch pouchd:%v", d.Args)
 	}
 
 	return nil
@@ -154,15 +168,6 @@ func (d *Config) KillDaemon() {
 		if err != nil {
 			fmt.Printf("kill pouchd failed, err:%s", err)
 			return
-		}
-
-		if _, err := os.Stat(d.HomeDir); err == nil {
-			err = os.RemoveAll(d.HomeDir)
-			if err != nil {
-				fmt.Printf("remove path %s failed, this may effect start pouchd in the same path",
-					d.HomeDir)
-				return
-			}
 		}
 
 		d.LogFile.Close()

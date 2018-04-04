@@ -11,6 +11,7 @@ import (
 
 	"github.com/go-check/check"
 	"github.com/gotestyourself/gotestyourself/icmd"
+	"github.com/stretchr/testify/assert"
 )
 
 // PouchCreateSuite is the test suite for create CLI.
@@ -26,7 +27,7 @@ func (suite *PouchCreateSuite) SetUpSuite(c *check.C) {
 
 	environment.PruneAllContainers(apiClient)
 
-	command.PouchRun("pull", busyboxImage).Assert(c, icmd.Success)
+	PullImage(c, busyboxImage)
 }
 
 // TearDownTest does cleanup work in the end of each test.
@@ -39,9 +40,6 @@ func (suite *PouchCreateSuite) TestCreateName(c *check.C) {
 	res := command.PouchRun("create", "--name", name, busyboxImage)
 
 	res.Assert(c, icmd.Success)
-	if out := res.Combined(); !strings.Contains(out, name) {
-		c.Fatalf("unexpected output %s expected %s\n", out, name)
-	}
 
 	defer DelContainerForceMultyTime(c, name)
 }
@@ -57,9 +55,7 @@ func (suite *PouchCreateSuite) TestCreateNameByImageID(c *check.C) {
 	res = command.PouchRun("create", "--name", name, imageID)
 
 	res.Assert(c, icmd.Success)
-	if out := res.Combined(); !strings.Contains(out, name) {
-		c.Fatalf("unexpected output %s expected %s\n", out, name)
-	}
+	assert.Equal(c, len(res.Combined()), 64)
 
 	DelContainerForceMultyTime(c, name)
 }
@@ -395,4 +391,22 @@ func (suite *PouchCreateSuite) TestCreateWithAliOSMemoryOptions(c *check.C) {
 	c.Assert(*result.HostConfig.MemoryExtra, check.Equals, int64(50))
 	c.Assert(result.HostConfig.MemoryForceEmptyCtl, check.Equals, int64(1))
 	c.Assert(result.HostConfig.ScheLatSwitch, check.Equals, int64(1))
+}
+
+// TestCreateWithOOMOption tests creating container with oom options.
+func (suite *PouchCreateSuite) TestCreateWithOOMOption(c *check.C) {
+	name := "TestCreateWithOOMOption"
+	oomScore := "100"
+
+	res := command.PouchRun("create", "--name", name, "--oom-score-adj", oomScore, "--oom-kill-disable", busyboxImage)
+	res.Assert(c, icmd.Success)
+
+	output := command.PouchRun("inspect", name).Stdout()
+
+	result := &types.ContainerJSON{}
+	if err := json.Unmarshal([]byte(output), result); err != nil {
+		c.Errorf("failed to decode inspect output: %v", err)
+	}
+	c.Assert(result.HostConfig.OomScoreAdj, check.Equals, int64(100))
+	c.Assert(*result.HostConfig.OomKillDisable, check.Equals, true)
 }

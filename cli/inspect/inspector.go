@@ -3,9 +3,12 @@ package inspect
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
+	"strings"
 	"text/template"
 
+	"github.com/alibaba/pouch/pkg/utils"
 	"github.com/alibaba/pouch/pkg/utils/templates"
 
 	"github.com/pkg/errors"
@@ -61,7 +64,7 @@ func Inspect(out io.Writer, ref string, tmplStr string, getRef GetRefFunc) error
 
 	element, err := getRef(ref)
 	if err != nil {
-		return errors.Errorf("Template parsing error: %v", err)
+		return errors.Errorf("Fetch object error: %v", err)
 	}
 
 	if err := inspector.Inspect(element); err != nil {
@@ -73,6 +76,30 @@ func Inspect(out io.Writer, ref string, tmplStr string, getRef GetRefFunc) error
 	}
 
 	return nil
+}
+
+// MultiInspect fetches objects with multiple references.
+func MultiInspect(out io.Writer, refs []string, tmplStr string, getRef GetRefFunc) error {
+	var errs []error
+	for _, ref := range refs {
+		err := Inspect(out, ref, tmplStr, getRef)
+		if err != nil {
+			errs = append(errs, err)
+		}
+	}
+	if len(errs) == 0 {
+		return nil
+	}
+
+	formatErrMsg := func(idx int, err error) (string, error) {
+		errMsg := err.Error()
+		errMsg = strings.TrimRight(errMsg, "\n")
+		if idx != 0 {
+			errMsg = fmt.Sprintf("Error: %s", errMsg)
+		}
+		return errMsg, nil
+	}
+	return utils.CombineErrors(errs, formatErrMsg)
 }
 
 // Inspect executes the inspect template.

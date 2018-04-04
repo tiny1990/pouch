@@ -1,6 +1,11 @@
 package config
 
 import (
+	"fmt"
+	"strings"
+	"sync"
+
+	"github.com/alibaba/pouch/client"
 	"github.com/alibaba/pouch/cri"
 	"github.com/alibaba/pouch/network"
 	"github.com/alibaba/pouch/pkg/utils"
@@ -9,6 +14,8 @@ import (
 
 // Config refers to daemon's whole configurations.
 type Config struct {
+	sync.Mutex
+
 	//Volume config
 	VolumeConfig volume.Config
 
@@ -44,7 +51,7 @@ type Config struct {
 	ContainerdPath string `json:"containerd-path"`
 
 	// TLS configuration
-	TLS utils.TLSConfig
+	TLS client.TLSConfig
 
 	// Default OCI Runtime
 	DefaultRuntime string `json:"default-runtime,omitempty"`
@@ -58,7 +65,7 @@ type Config struct {
 	// LxcfsHome is the absolute path of lxcfs
 	LxcfsHome string
 
-	// ImageProxy is a http proxy to pull image
+	// ImagxeProxy is a http proxy to pull image
 	ImageProxy string `json:"image-proxy,omitempty"`
 
 	// QuotaDriver is used to set the driver of Quota
@@ -72,4 +79,28 @@ type Config struct {
 
 	// PluginPath is set the path where plugin so file put
 	PluginPath string `json:"plugin"`
+
+	// Labels is the metadata of daemon
+	Labels []string `json:"labels,omitempty"`
+}
+
+// Validate validates the user input config.
+func (cfg *Config) Validate() error {
+	// deduplicated elements in slice if there is any.
+	cfg.Listen = utils.DeDuplicate(cfg.Listen)
+	cfg.Labels = utils.DeDuplicate(cfg.Labels)
+
+	for _, label := range cfg.Labels {
+		data := strings.SplitN(label, "=", 2)
+		if len(data) != 2 {
+			return fmt.Errorf("daemon label %s must be in format of key=value", label)
+		}
+		if len(data[0]) == 0 || len(data[1]) == 0 {
+			return fmt.Errorf("key and value in daemon label %s cannot be empty", label)
+		}
+	}
+
+	// TODO: add config validation
+
+	return nil
 }

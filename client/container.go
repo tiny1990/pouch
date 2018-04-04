@@ -6,7 +6,6 @@ import (
 	"io"
 	"net"
 	"net/url"
-	"strconv"
 	"strings"
 
 	"github.com/alibaba/pouch/apis/types"
@@ -38,19 +37,6 @@ func (client *APIClient) ContainerCreate(ctx context.Context, config types.Conta
 	return container, err
 }
 
-// ContainerStart starts a created container.
-func (client *APIClient) ContainerStart(ctx context.Context, name, detachKeys string) error {
-	q := url.Values{}
-	if detachKeys != "" {
-		q.Set("detachKeys", detachKeys)
-	}
-
-	resp, err := client.post(ctx, "/containers/"+name+"/start", q, nil, nil)
-	ensureCloseReader(resp)
-
-	return err
-}
-
 // ContainerStop stops a container.
 func (client *APIClient) ContainerStop(ctx context.Context, name string, timeout string) error {
 	q := url.Values{}
@@ -75,25 +61,6 @@ func (client *APIClient) ContainerRemove(ctx context.Context, name string, force
 	}
 	ensureCloseReader(resp)
 	return nil
-}
-
-// ContainerList returns the list of containers.
-func (client *APIClient) ContainerList(ctx context.Context, all bool) ([]*types.Container, error) {
-	q := url.Values{}
-	if all {
-		q.Set("all", "true")
-	}
-
-	resp, err := client.get(ctx, "/containers/json", q, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	containers := []*types.Container{}
-	err = decodeBody(&containers, resp.Body)
-	ensureCloseReader(resp)
-
-	return containers, err
 }
 
 // ContainerAttach attach a container
@@ -135,35 +102,15 @@ func (client *APIClient) ContainerStartExec(ctx context.Context, execid string, 
 	return client.hijack(ctx, "/exec/"+execid+"/start", url.Values{}, config, header)
 }
 
-// ContainerGet returns the detailed information of container.
-func (client *APIClient) ContainerGet(ctx context.Context, name string) (*types.ContainerJSON, error) {
-	resp, err := client.get(ctx, "/containers/"+name+"/json", nil, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	container := types.ContainerJSON{}
-	err = decodeBody(&container, resp.Body)
-	ensureCloseReader(resp)
-
-	return &container, err
-}
-
-// ContainerRename renames a container.
-func (client *APIClient) ContainerRename(ctx context.Context, id string, name string) error {
+// ContainerRestart restarts a running container.
+func (client *APIClient) ContainerRestart(ctx context.Context, name string, timeout string) error {
 	q := url.Values{}
-	q.Add("name", name)
+	q.Add("t", timeout)
 
-	resp, err := client.post(ctx, "/containers/"+id+"/rename", q, nil, nil)
+	resp, err := client.post(ctx, "/containers/"+name+"/restart", q, nil, nil)
 	ensureCloseReader(resp)
 
 	return err
-}
-
-// ContainerRestart restarts a contianer.
-func (client *APIClient) ContainerRestart(ctx context.Context, name string, time int) error {
-	// TODO
-	return nil
 }
 
 // ContainerPause pauses a container.
@@ -182,19 +129,17 @@ func (client *APIClient) ContainerUnpause(ctx context.Context, name string) erro
 	return err
 }
 
-// ContainerUpdate updates the configurations of a container.
-func (client *APIClient) ContainerUpdate(ctx context.Context, name string, config *types.UpdateConfig) error {
-	resp, err := client.post(ctx, "/containers/"+name+"/update", url.Values{}, config, nil)
-	ensureCloseReader(resp)
-
-	return err
-
-}
-
 // ContainerUpgrade upgrade a container with new image and args.
 func (client *APIClient) ContainerUpgrade(ctx context.Context, name string, config types.ContainerConfig, hostConfig *types.HostConfig) error {
 	// TODO
-	return nil
+	upgradeConfig := types.ContainerUpgradeConfig{
+		ContainerConfig: config,
+		HostConfig:      hostConfig,
+	}
+	resp, err := client.post(ctx, "/containers/"+name+"/upgrade", url.Values{}, upgradeConfig, nil)
+	ensureCloseReader(resp)
+
+	return err
 }
 
 // ContainerTop shows process information from within a container.
@@ -256,10 +201,10 @@ func (client *APIClient) ContainerLogs(ctx context.Context, name string, options
 }
 
 // ContainerResize resizes the size of container tty.
-func (client *APIClient) ContainerResize(ctx context.Context, name string, opts types.ResizeOptions) error {
+func (client *APIClient) ContainerResize(ctx context.Context, name, height, width string) error {
 	query := url.Values{}
-	query.Set("h", strconv.Itoa(int(opts.Height)))
-	query.Set("w", strconv.Itoa(int(opts.Width)))
+	query.Set("h", height)
+	query.Set("w", width)
 
 	resp, err := client.post(ctx, "/containers/"+name+"/resize", query, nil, nil)
 	ensureCloseReader(resp)

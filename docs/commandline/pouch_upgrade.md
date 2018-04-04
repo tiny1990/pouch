@@ -10,6 +10,15 @@ Upgrade a container with new image and args
 pouch upgrade [OPTIONS] IMAGE [COMMAND] [ARG...]
 ```
 
+### Examples
+
+```
+ $ pouch run -d -m 20m --name test1  registry.hub.docker.com/library/busybox:latest
+4c58d27f58d38776dda31c01c897bbf554c802a9b80ae4dc20be1337f8a969f2
+$ pouch upgrade --name test1 registry.hub.docker.com/library/hello-world:latest
+test1
+```
+
 ### Options
 
 ```
@@ -26,6 +35,7 @@ pouch upgrade [OPTIONS] IMAGE [COMMAND] [ARG...]
       --device-read-iops value       Limit read rate (IO per second) from a device (default [])
       --device-write-bps value       Limit write rate (bytes per second) from a device (default [])
       --device-write-iops value      Limit write rate (IO per second) from a device (default [])
+      --disk-quota strings           Set disk quota for container
       --enableLxcfs                  Enable lxcfs for the container, only effective when enable-lxcfs switched on in Pouchd
       --entrypoint string            Overwrite the default ENTRYPOINT of the image
   -e, --env strings                  Set environment variables for container
@@ -45,6 +55,8 @@ pouch upgrade [OPTIONS] IMAGE [COMMAND] [ARG...]
       --memory-wmark-ratio int       Represent this container's memory low water mark percentage, range in [0, 100]. The value of memory low water mark is memory.limit_in_bytes * MemoryWmarkRatio
       --name string                  Specify name of container
       --net strings                  Set networks to container
+      --oom-kill-disable             Disable OOM Killer
+      --oom-score-adj int            Tune host's OOM preferences (-1000 to 1000) (default -500)
       --pid string                   PID namespace to use
   -p, --port strings                 Set container ports mapping
       --privileged                   Give extended privileges to the container
@@ -58,7 +70,7 @@ pouch upgrade [OPTIONS] IMAGE [COMMAND] [ARG...]
   -t, --tty                          Allocate a pseudo-TTY
   -u, --user string                  UID
       --uts string                   UTS namespace to use
-  -v, --volume strings               Bind mount volumes to container
+  -v, --volume strings               Bind mount volumes to container, format is: [source:]<destination>[:mode], [source] can be volume or host's path, <destination> is container's path, [mode] can be "ro/rw/dr/rr/z/Z/nocopy/private/rprivate/slave/rslave/shared/rshared"
   -w, --workdir string               Set the working directory in a container
 ```
 

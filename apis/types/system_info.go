@@ -52,6 +52,10 @@ type SystemInfo struct {
 	// Indicates if the daemon is running in debug-mode / with debug-level logging enabled.
 	Debug bool `json:"Debug,omitempty"`
 
+	// default registry can be defined by user.
+	//
+	DefaultRegistry string `json:"DefaultRegistry,omitempty"`
+
 	// Name of the default OCI runtime that is used when starting containers.
 	// The default can be overridden per-container at create time.
 	//
@@ -121,6 +125,9 @@ type SystemInfo struct {
 	// User-defined labels (key/value metadata) as set on the daemon.
 	//
 	Labels []string `json:"Labels"`
+
+	// List of addresses the pouchd listens on
+	ListenAddresses []string `json:"ListenAddresses"`
 
 	// Indicates if live restore is enabled.
 	// If enabled, containers are kept running when the daemon is shutdown
@@ -214,6 +221,8 @@ type SystemInfo struct {
 
 /* polymorph SystemInfo Debug false */
 
+/* polymorph SystemInfo DefaultRegistry false */
+
 /* polymorph SystemInfo DefaultRuntime false */
 
 /* polymorph SystemInfo Driver false */
@@ -235,6 +244,8 @@ type SystemInfo struct {
 /* polymorph SystemInfo KernelVersion false */
 
 /* polymorph SystemInfo Labels false */
+
+/* polymorph SystemInfo ListenAddresses false */
 
 /* polymorph SystemInfo LiveRestoreEnabled false */
 
@@ -282,6 +293,11 @@ func (m *SystemInfo) Validate(formats strfmt.Registry) error {
 	}
 
 	if err := m.validateLabels(formats); err != nil {
+		// prop
+		res = append(res, err)
+	}
+
+	if err := m.validateListenAddresses(formats); err != nil {
 		// prop
 		res = append(res, err)
 	}
@@ -384,6 +400,15 @@ func (m *SystemInfo) validateDriverStatus(formats strfmt.Registry) error {
 func (m *SystemInfo) validateLabels(formats strfmt.Registry) error {
 
 	if swag.IsZero(m.Labels) { // not required
+		return nil
+	}
+
+	return nil
+}
+
+func (m *SystemInfo) validateListenAddresses(formats strfmt.Registry) error {
+
+	if swag.IsZero(m.ListenAddresses) { // not required
 		return nil
 	}
 

@@ -30,14 +30,14 @@ type ContainerAPIClient interface {
 	ContainerStartExec(ctx context.Context, execid string, config *types.ExecStartConfig) (net.Conn, *bufio.Reader, error)
 	ContainerGet(ctx context.Context, name string) (*types.ContainerJSON, error)
 	ContainerRename(ctx context.Context, id string, name string) error
-	ContainerRestart(ctx context.Context, name string, time int) error
+	ContainerRestart(ctx context.Context, name string, timeout string) error
 	ContainerPause(ctx context.Context, name string) error
 	ContainerUnpause(ctx context.Context, name string) error
 	ContainerUpdate(ctx context.Context, name string, config *types.UpdateConfig) error
 	ContainerUpgrade(ctx context.Context, name string, config types.ContainerConfig, hostConfig *types.HostConfig) error
 	ContainerTop(ctx context.Context, name string, arguments []string) (types.ContainerProcessList, error)
 	ContainerLogs(ctx context.Context, name string, options types.ContainerLogsOptions) (io.ReadCloser, error)
-	ContainerResize(ctx context.Context, name string, options types.ResizeOptions) error
+	ContainerResize(ctx context.Context, name, height, width string) error
 }
 
 // ImageAPIClient defines methods of Image client.

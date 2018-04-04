@@ -262,10 +262,10 @@ func (n *NetworkInspectCommand) Init(c *Cli) {
 	n.cli = c
 
 	n.cmd = &cobra.Command{
-		Use:   "inspect [OPTIONS] NAME",
-		Short: "Inspect a pouch network",
+		Use:   "inspect [OPTIONS] Network [Network...]",
+		Short: "Inspect one or more pouch networks",
 		Long:  networkInspectDescription,
-		Args:  cobra.ExactArgs(1),
+		Args:  cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return n.runNetworkInspect(args)
 		},
@@ -283,8 +283,6 @@ func (n *NetworkInspectCommand) addFlags() {
 
 // runNetworkInspect is the entry of NetworkInspectCommand command.
 func (n *NetworkInspectCommand) runNetworkInspect(args []string) error {
-	name := args[0]
-
 	ctx := context.Background()
 	apiClient := n.cli.Client()
 
@@ -292,7 +290,7 @@ func (n *NetworkInspectCommand) runNetworkInspect(args []string) error {
 		return apiClient.NetworkInspect(ctx, ref)
 	}
 
-	return inspect.Inspect(os.Stdout, name, n.format, getRefFunc)
+	return inspect.MultiInspect(os.Stdout, args, n.format, getRefFunc)
 }
 
 // networkInspectExample shows examples in network inspect command, and is used in auto-generated cli docs.

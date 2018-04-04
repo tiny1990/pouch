@@ -14,7 +14,7 @@ import (
 // DaemonProvider provides resources which are needed by container manager and are from daemon.
 type DaemonProvider interface {
 	Config() *config.Config
-	Containerd() *ctrd.Client
+	Containerd() ctrd.APIClient
 	CtrMgr() mgr.ContainerMgr
 	ImgMgr() mgr.ImageMgr
 	VolMgr() mgr.VolumeMgr
@@ -29,8 +29,8 @@ func GenContainerMgr(ctx context.Context, d DaemonProvider) (mgr.ContainerMgr, e
 }
 
 // GenSystemMgr generates a SystemMgr instance according to config cfg.
-func GenSystemMgr(cfg *config.Config) (mgr.SystemMgr, error) {
-	return mgr.NewSystemManager(cfg)
+func GenSystemMgr(cfg *config.Config, d DaemonProvider) (mgr.SystemMgr, error) {
+	return mgr.NewSystemManager(cfg, d.MetaStore())
 }
 
 // GenImageMgr generates a ImageMgr instance according to config cfg.

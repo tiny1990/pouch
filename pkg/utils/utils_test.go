@@ -1,6 +1,8 @@
 package utils
 
 import (
+	goerrors "errors"
+	"reflect"
 	"testing"
 	"time"
 
@@ -160,7 +162,7 @@ func TestMerge(t *testing.T) {
 		}, {
 			src:      getIntAddr(1),
 			dest:     getIntAddr(2),
-			expected: "merged object type shoule be struct",
+			expected: "merged object type should be struct",
 			ok:       false,
 		}, {
 			src:      &nestS{},
@@ -196,4 +198,84 @@ func TestMerge(t *testing.T) {
 			assert.EqualError(err, errMsg)
 		}
 	}
+}
+
+func TestDeDuplicate(t *testing.T) {
+	type args struct {
+		input []string
+	}
+	tests := []struct {
+		name string
+		args args
+		want []string
+	}{
+		{
+			name: "nil test case",
+			args: args{
+				input: nil,
+			},
+			want: nil,
+		},
+		{
+			name: "two duplicated case",
+			args: args{
+				input: []string{"asdfgh", "asdfgh"},
+			},
+			want: []string{"asdfgh"},
+		},
+		{
+			name: "case with no duplicated",
+			args: args{
+				input: []string{"asdfgh01", "asdfgh02", "asdfgh03", "asdfgh04"},
+			},
+			want: []string{"asdfgh01", "asdfgh02", "asdfgh03", "asdfgh04"},
+		},
+		{
+			name: "case with no duplicated",
+			args: args{
+				input: []string{"asdfgh01", "asdfgh02", "asdfgh01"},
+			},
+			want: []string{"asdfgh01", "asdfgh02"},
+		},
+		{
+			name: "case with 3 duplicated",
+			args: args{
+				input: []string{"asdfgh01", "asdfgh01", "asdfgh01"},
+			},
+			want: []string{"asdfgh01"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := DeDuplicate(tt.args.input); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("DeDuplicate() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestCombineErrors(t *testing.T) {
+	formatErrMsg := func(idx int, err error) (string, error) {
+		return "Error: " + err.Error(), nil
+	}
+	errs := []error{
+		goerrors.New("Fetch object error: No such object: alpine"),
+		goerrors.New("Template parsing error: Can't evaluate field Name"),
+	}
+	combinedErr := CombineErrors(errs, formatErrMsg)
+	expectedErrMsg := "Error: Fetch object error: No such object: alpine\n" +
+		"Error: Template parsing error: Can't evaluate field Name"
+	if combinedErr.Error() != expectedErrMsg {
+		t.Errorf("get error: expected: \n%s, but was: \n%s", expectedErrMsg, combinedErr)
+	}
+
+	formatErrMsg = func(idx int, err error) (string, error) {
+		return "", goerrors.New("Error: failed to format error message")
+	}
+	combinedErr = CombineErrors(errs, formatErrMsg)
+	expectedErrMsg = "Combine errors error: Error: failed to format error message"
+	if combinedErr.Error() != expectedErrMsg {
+		t.Errorf("get error: expected: %s, but was: %s", expectedErrMsg, combinedErr)
+	}
+
 }

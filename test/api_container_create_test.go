@@ -4,12 +4,10 @@ import (
 	"net/url"
 
 	"github.com/alibaba/pouch/apis/types"
-	"github.com/alibaba/pouch/test/command"
 	"github.com/alibaba/pouch/test/environment"
 	"github.com/alibaba/pouch/test/request"
 
 	"github.com/go-check/check"
-	"github.com/gotestyourself/gotestyourself/icmd"
 )
 
 // APIContainerCreateSuite is the test suite for container create API.
@@ -22,7 +20,7 @@ func init() {
 // SetUpTest does common setup in the beginning of each test.
 func (suite *APIContainerCreateSuite) SetUpTest(c *check.C) {
 	SkipIfFalse(c, environment.IsLinux)
-	command.PouchRun("pull", busyboxImage).Assert(c, icmd.Success)
+	PullImage(c, busyboxImage)
 }
 
 // TestCreateOk test create api is ok with default parameters.
@@ -294,6 +292,26 @@ func (suite *APIContainerCreateSuite) TestAliOSOptions(c *check.C) {
 			"MemoryExtra":         int64(50),
 			"MemoryForceEmptyCtl": 0,
 			"ScheLatSwitch":       0,
+		},
+	}
+	body := request.WithJSONBody(obj)
+
+	resp, err := request.Post("/containers/create", query, body)
+	c.Assert(err, check.IsNil)
+	CheckRespStatus(c, resp, 201)
+}
+
+func (suite *APIContainerCreateSuite) TestCreateOOMOption(c *check.C) {
+	cname := "TestCreateOOMOption"
+	q := url.Values{}
+	q.Add("name", cname)
+	query := request.WithQuery(q)
+
+	obj := map[string]interface{}{
+		"Image": busyboxImage,
+		"HostConfig": map[string]interface{}{
+			"OomScoreAdj":    100,
+			"OomKillDisable": true,
 		},
 	}
 	body := request.WithJSONBody(obj)

@@ -750,6 +750,39 @@ POST /containers/{id}/upgrade
 * Container
 
 
+<a name="daemon-update-post"></a>
+### Update daemon's labels and image proxy
+```
+POST /daemon/update
+```
+
+
+#### Parameters
+
+|Type|Name|Description|Schema|
+|---|---|---|---|
+|**Body**|**DaemonUpdateConfig**  <br>*optional*|Config used to update daemon, only labels and image proxy are allowed.|[DaemonUpdateConfig](#daemonupdateconfig)|
+
+
+#### Responses
+
+|HTTP Code|Description|Schema|
+|---|---|---|
+|**200**|no error|No Content|
+|**400**|bad parameter|[Error](#error)|
+|**500**|An unexpected server error occured.|[Error](#error)|
+
+
+#### Consumes
+
+* `application/json`
+
+
+#### Produces
+
+* `application/json`
+
+
 <a name="execstart"></a>
 ### Start an exec instance
 ```
@@ -1406,7 +1439,7 @@ GET "/containers/json"
 |**Command**  <br>*optional*||string|
 |**Created**  <br>*optional*|Created time of container in daemon.|integer (int64)|
 |**HostConfig**  <br>*optional*|In Moby's API, HostConfig field in Container struct has following type <br>struct { NetworkMode string `json:",omitempty"` }<br>In Pouch, we need to pick runtime field in HostConfig from daemon side to judge runtime type,<br>So Pouch changes this type to be the complete HostConfig.<br>Incompatibility exists, ATTENTION.|[HostConfig](#hostconfig)|
-|**ID**  <br>*optional*||string|
+|**Id**  <br>*optional*|Container ID|string|
 |**Image**  <br>*optional*||string|
 |**ImageID**  <br>*optional*||string|
 |**Labels**  <br>*optional*||< string, string > map|
@@ -1431,6 +1464,7 @@ Configuration for a container that is portable between hosts
 |**AttachStdin**  <br>*optional*|Whether to attach to `stdin`.|boolean|
 |**AttachStdout**  <br>*optional*|Whether to attach to `stdout`.  <br>**Default** : `true`|boolean|
 |**Cmd**  <br>*optional*|Command to run specified an array of strings.|< string > array|
+|**DiskQuota**  <br>*optional*|Set disk quota for container|< string, string > map|
 |**Domainname**  <br>*optional*|The domain name to use for the container.|string|
 |**Entrypoint**  <br>*optional*|The entry point for the container as a string or an array of strings.<br>If the array consists of exactly one empty string (`[""]`) then the entry point is reset to system default.|< string > array|
 |**Env**  <br>*optional*|A list of environment variables to set inside the container in the form `["VAR=value", ...]`. A variable without `=` is removed from the environment, rather than to have an empty value.|< string > array|
@@ -1471,6 +1505,7 @@ It can be used to encode client params in client and unmarshal request body in d
 |**AttachStdin**  <br>*optional*|Whether to attach to `stdin`.|boolean|
 |**AttachStdout**  <br>*optional*|Whether to attach to `stdout`.  <br>**Default** : `true`|boolean|
 |**Cmd**  <br>*optional*|Command to run specified an array of strings.|< string > array|
+|**DiskQuota**  <br>*optional*|Set disk quota for container|< string, string > map|
 |**Domainname**  <br>*optional*|The domain name to use for the container.|string|
 |**Entrypoint**  <br>*optional*|The entry point for the container as a string or an array of strings.<br>If the array consists of exactly one empty string (`[""]`) then the entry point is reset to system default.|< string > array|
 |**Env**  <br>*optional*|A list of environment variables to set inside the container in the form `["VAR=value", ...]`. A variable without `=` is removed from the environment, rather than to have an empty value.|< string > array|
@@ -1605,6 +1640,7 @@ It can be used to encode client params in client and unmarshal request body in d
 |**AttachStdin**  <br>*optional*|Whether to attach to `stdin`.|boolean|
 |**AttachStdout**  <br>*optional*|Whether to attach to `stdout`.  <br>**Default** : `true`|boolean|
 |**Cmd**  <br>*optional*|Command to run specified an array of strings.|< string > array|
+|**DiskQuota**  <br>*optional*|Set disk quota for container|< string, string > map|
 |**Domainname**  <br>*optional*|The domain name to use for the container.|string|
 |**Entrypoint**  <br>*optional*|The entry point for the container as a string or an array of strings.<br>If the array consists of exactly one empty string (`[""]`) then the entry point is reset to system default.|< string > array|
 |**Env**  <br>*optional*|A list of environment variables to set inside the container in the form `["VAR=value", ...]`. A variable without `=` is removed from the environment, rather than to have an empty value.|< string > array|
@@ -1628,6 +1664,15 @@ It can be used to encode client params in client and unmarshal request body in d
 |**User**  <br>*optional*|The user that commands are run as inside the container.|string|
 |**Volumes**  <br>*optional*|An object mapping mount point paths inside the container to empty objects.|< string, object > map|
 |**WorkingDir**  <br>*optional*|The working directory for commands to run in.|string|
+
+
+<a name="daemonupdateconfig"></a>
+### DaemonUpdateConfig
+
+|Name|Description|Schema|
+|---|---|---|
+|**ImageProxy**  <br>*optional*|Image proxy used to pull image.|string|
+|**Labels**  <br>*optional*|Labels indentified the attributes of daemon  <br>**Example** : `[ "storage=ssd", "zone=hangzhou" ]`|< string > array|
 
 
 <a name="devicemapping"></a>
@@ -1788,7 +1833,7 @@ Container configuration that depends on the host we are running on
 |**NanoCPUs**  <br>*optional*|CPU quota in units of 10<sup>-9</sup> CPUs.|integer (int64)|
 |**NetworkMode**  <br>*optional*|Network mode to use for this container. Supported standard values are: `bridge`, `host`, `none`, and `container:<name\|id>`. Any other value is taken as a custom network's name to which this container should connect to.|string|
 |**OomKillDisable**  <br>*optional*|Disable OOM Killer for the container.|boolean|
-|**OomScoreAdj**  <br>*optional*|An integer value containing the score given to the container in order to tune OOM killer preferences.  <br>**Example** : `500`|integer|
+|**OomScoreAdj**  <br>*optional*|An integer value containing the score given to the container in order to tune OOM killer preferences.<br>The range is in [-1000, 1000].  <br>**Minimum value** : `-1000`  <br>**Maximum value** : `1000`|integer (int)|
 |**PidMode**  <br>*optional*|Set the PID (Process) Namespace mode for the container. It can be either:<br>- `"container:<name\|id>"`: joins another container's PID namespace<br>- `"host"`: use the host's PID namespace inside the container|string|
 |**PidsLimit**  <br>*optional*|Tune a container's pids limit. Set -1 for unlimited. Only on Linux 4.4 does this paramter support.|integer (int64)|
 |**PortBindings**  <br>*optional*|A map of exposed container ports and the host port they should map to.|[PortMap](#portmap)|
@@ -1912,12 +1957,16 @@ A mount point inside a container
 
 |Name|Schema|
 |---|---|
+|**CopyData**  <br>*optional*|boolean|
 |**Destination**  <br>*optional*|string|
 |**Driver**  <br>*optional*|string|
+|**ID**  <br>*optional*|string|
 |**Mode**  <br>*optional*|string|
 |**Name**  <br>*optional*|string|
+|**Named**  <br>*optional*|boolean|
 |**Propagation**  <br>*optional*|string|
 |**RW**  <br>*optional*|boolean|
+|**Replace**  <br>*optional*|string|
 |**Source**  <br>*optional*|string|
 |**Type**  <br>*optional*|string|
 
@@ -2196,6 +2245,7 @@ The status of the container. For example, "running" or "exited".
 |**ContainersRunning**  <br>*optional*|Number of containers with status `"running"`.  <br>**Example** : `3`|integer|
 |**ContainersStopped**  <br>*optional*|Number of containers with status `"stopped"`.  <br>**Example** : `10`|integer|
 |**Debug**  <br>*optional*|Indicates if the daemon is running in debug-mode / with debug-level logging enabled.  <br>**Example** : `true`|boolean|
+|**DefaultRegistry**  <br>*optional*|default registry can be defined by user.|string|
 |**DefaultRuntime**  <br>*optional*|Name of the default OCI runtime that is used when starting containers.<br>The default can be overridden per-container at create time.  <br>**Default** : `"runc"`  <br>**Example** : `"runc"`|string|
 |**Driver**  <br>*optional*|Name of the storage driver in use.  <br>**Example** : `"overlay2"`|string|
 |**DriverStatus**  <br>*optional*|Information specific to the storage driver, provided as<br>"label" / "value" pairs.<br><br>This information is provided by the storage driver, and formatted<br>in a way consistent with the output of `pouch info` on the command<br>line.<br><br><p><br /></p><br><br>> **Note**: The information returned in this field, including the<br>> formatting of values and labels, should not be considered stable,<br>> and may change without notice.  <br>**Example** : `[ [ "Backing Filesystem", "extfs" ], [ "Supports d_type", "true" ], [ "Native Overlay Diff", "true" ] ]`|< < string > array > array|
@@ -2207,6 +2257,7 @@ The status of the container. For example, "running" or "exited".
 |**IndexServerAddress**  <br>*optional*|Address / URL of the index server that is used for image search,<br>and as a default for user authentication.|string|
 |**KernelVersion**  <br>*optional*|Kernel version of the host.<br>On Linux, this information obtained from `uname`.|string|
 |**Labels**  <br>*optional*|User-defined labels (key/value metadata) as set on the daemon.  <br>**Example** : `[ "storage=ssd", "production" ]`|< string > array|
+|**ListenAddresses**  <br>*optional*|List of addresses the pouchd listens on  <br>**Example** : `[ [ "unix:///var/run/pouchd.sock", "tcp://0.0.0.0:4243" ] ]`|< string > array|
 |**LiveRestoreEnabled**  <br>*optional*|Indicates if live restore is enabled.<br>If enabled, containers are kept running when the daemon is shutdown<br>or upon daemon start if running containers are detected.  <br>**Default** : `false`  <br>**Example** : `false`|boolean|
 |**LoggingDriver**  <br>*optional*|The logging driver to use as a default for new containers.|string|
 |**MemTotal**  <br>*optional*|Total amount of physical memory available on the host, in kilobytes (kB).  <br>**Example** : `2095882240`|integer (int64)|

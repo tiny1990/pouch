@@ -28,6 +28,8 @@ var setupFunc = []SetupFunc{
 	setupProcessTTY,
 	setupProcessUser,
 	setupCap,
+	setupNoNewPrivileges,
+	setupOOMScoreAdj,
 
 	// cgroup
 	setupCgroupCPUShare,
@@ -35,6 +37,7 @@ var setupFunc = []SetupFunc{
 	setupCgroupMemory,
 	setupCgroupMemorySwap,
 	setupCgroupMemorySwappiness,
+	setupDisableOOMKill,
 
 	// namespaces
 	setupUserNamespace,
@@ -67,6 +70,9 @@ var setupFunc = []SetupFunc{
 
 	// annotations in spec
 	setupAnnotations,
+
+	// rootfs spec
+	setupRoot,
 
 	//hook
 	setupHook,

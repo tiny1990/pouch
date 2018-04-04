@@ -14,6 +14,7 @@ import (
 	"github.com/containerd/containerd"
 	"github.com/containerd/containerd/cio"
 	"github.com/containerd/containerd/errdefs"
+	"github.com/containerd/containerd/leases"
 	"github.com/containerd/containerd/linux/runctypes"
 	"github.com/containerd/containerd/oci"
 	"github.com/pkg/errors"
@@ -103,6 +104,11 @@ func (c *Client) ContainerPID(ctx context.Context, id string) (int, error) {
 
 // ContainerPIDs returns the all processes's ids inside the container.
 func (c *Client) ContainerPIDs(ctx context.Context, id string) ([]int, error) {
+	if !c.lock.Trylock(id) {
+		return nil, errtypes.ErrLockfailed
+	}
+	defer c.lock.Unlock(id)
+
 	pack, err := c.watch.get(id)
 	if err != nil {
 		return nil, err
@@ -185,6 +191,11 @@ func (c *Client) RecoverContainer(ctx context.Context, id string, io *containeri
 
 // DestroyContainer kill container and delete it.
 func (c *Client) DestroyContainer(ctx context.Context, id string, timeout int64) (*Message, error) {
+	// TODO(ziren): if we just want to stop a container,
+	// we may need lease to lock the snapshot of container,
+	// in case, it be deleted by gc.
+	ctx = leases.WithLease(ctx, c.lease.ID())
+
 	if !c.lock.Trylock(id) {
 		return nil, errtypes.ErrLockfailed
 	}
@@ -445,27 +456,18 @@ func (c *Client) UpdateResources(ctx context.Context, id string, resources types
 	return pack.task.Update(ctx, containerd.WithResources(r))
 }
 
-// GetPidsForContainer returns s list of process IDs running in a container.
-func (c *Client) GetPidsForContainer(ctx context.Context, id string) ([]int, error) {
+// ResizeContainer changes the size of the TTY of the init process running
+// in the container to the given height and width.
+func (c *Client) ResizeContainer(ctx context.Context, id string, opts types.ResizeOptions) error {
 	if !c.lock.Trylock(id) {
-		return nil, errtypes.ErrLockfailed
+		return errtypes.ErrLockfailed
 	}
 	defer c.lock.Unlock(id)
 
-	var pids []int
-
 	pack, err := c.watch.get(id)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	processes, err := pack.task.Pids(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	for _, ps := range processes {
-		pids = append(pids, int(ps.Pid))
-	}
-	return pids, nil
+	return pack.task.Resize(ctx, uint32(opts.Height), uint32(opts.Width))
 }

@@ -83,6 +83,29 @@ paths:
           description: "Authentication to check"
           schema:
             $ref: "#/definitions/AuthConfig"
+  
+  /daemon/update:
+    post:
+      summary: "Update daemon's labels and image proxy"
+      consumes:
+        - "application/json"
+      produces:
+        - "application/json"
+      responses:
+        200:
+          description: "no error"
+        400:
+          description: "bad parameter"
+          schema:
+            $ref: '#/definitions/Error'
+        500:
+          $ref: "#/responses/500ErrorResponse"
+      parameters:
+        - name: "DaemonUpdateConfig"
+          in: body
+          description: "Config used to update daemon, only labels and image proxy are allowed."
+          schema:
+            $ref: "#/definitions/DaemonUpdateConfig"
 
   /images/create:
     post:
@@ -1215,6 +1238,10 @@ definitions:
           Address / URL of the index server that is used for image search,
           and as a default for user authentication.
         type: "string"
+      DefaultRegistry:
+        description: |
+          default registry can be defined by user.
+        type: "string"
       RegistryConfig:
         $ref: "#/definitions/RegistryServiceConfig"
       HttpProxy:
@@ -1317,6 +1344,26 @@ definitions:
           - "name=seccomp,profile=default"
           - "name=selinux"
           - "name=userns"
+      ListenAddresses:
+        description: "List of addresses the pouchd listens on"
+        type: "array"
+        items:
+          type: "string"
+        example:
+          - ["unix:///var/run/pouchd.sock", "tcp://0.0.0.0:4243"]
+
+  DaemonUpdateConfig:
+    type: "object"
+    properties:
+      Labels:
+        description: "Labels indentified the attributes of daemon"
+        type: "array"
+        items:
+          type: "string"
+        example: ["storage=ssd", "zone=hangzhou"]
+      ImageProxy:
+        description: "Image proxy used to pull image."
+        type: "string"
 
   RegistryServiceConfig:
     description: |
@@ -1843,8 +1890,14 @@ definitions:
               type: "string"
           OomScoreAdj:
             type: "integer"
-            description: "An integer value containing the score given to the container in order to tune OOM killer preferences."
-            example: 500
+            description: |
+                An integer value containing the score given to the container in order to tune OOM killer preferences.
+                The range is in [-1000, 1000].
+            type: "integer"
+            format: "int"
+            x-nullable: false
+            minimum: -1000
+            maximum: 1000
           PidMode:
             type: "string"
             description: |
@@ -2217,7 +2270,8 @@ definitions:
       GET "/containers/json"
     type: "object"
     properties:
-      ID:
+      Id:
+        description: "Container ID"
         type: "string"
       Names:
         type: "array"
@@ -2784,6 +2838,8 @@ definitions:
     properties:
       Type:
         type: "string"
+      ID:
+        type: "string"
       Name:
         type: "string"
       Source:
@@ -2796,6 +2852,12 @@ definitions:
         type: "string"
       RW:
         type: "boolean"
+      CopyData:
+        type: "boolean"
+      Named:
+        type: "boolean"
+      Replace:
+        type: "string"
       Propagation:
         type: "string"
 

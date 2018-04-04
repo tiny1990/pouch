@@ -37,9 +37,6 @@ function install_pouch ()
 			apt-get update
 			apt-get install -y lxcfs
 		fi
-
-		# MUST stop lxcfs service, so pouchd could take over it.
-		service lxcfs stop
 	else
 		sh -x $DIR/hack/install_lxcfs_on_centos.sh
 	fi
@@ -123,7 +120,7 @@ function target()
 			fi
 		done
 
-		pouch pull registry.hub.docker.com/library/busybox:latest >/dev/null
+		pouch pull registry.hub.docker.com/library/busybox:1.28 >/dev/null
 
 		echo "verify pouch version"
 		pouch version

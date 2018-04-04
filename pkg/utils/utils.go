@@ -136,7 +136,7 @@ func Merge(src, dest interface{}) error {
 	destVal := reflect.ValueOf(dest).Elem()
 
 	if destVal.Kind() != reflect.Struct {
-		return fmt.Errorf("merged object type shoule be struct")
+		return fmt.Errorf("merged object type should be struct")
 	}
 
 	srcVal := reflect.ValueOf(src)
@@ -195,4 +195,39 @@ func isEmptyValue(v reflect.Value) bool {
 		return v.IsNil()
 	}
 	return false
+}
+
+// DeDuplicate make a slice with no duplicated elements.
+func DeDuplicate(input []string) []string {
+	if input == nil {
+		return nil
+	}
+	result := []string{}
+	internal := map[string]struct{}{}
+	for _, value := range input {
+		if _, exist := internal[value]; !exist {
+			internal[value] = struct{}{}
+			result = append(result, value)
+		}
+	}
+	return result
+}
+
+// FormatErrMsgFunc is a function which used by CombineErrors to
+// format error message
+type FormatErrMsgFunc func(idx int, err error) (string, error)
+
+// CombineErrors is a function which used by MultiInspect to merge multiple errors
+// into one error.
+func CombineErrors(errs []error, formatErrMsg FormatErrMsgFunc) error {
+	var errMsgs []string
+	for idx, err := range errs {
+		formattedErrMsg, formatError := formatErrMsg(idx, err)
+		if formatError != nil {
+			return fmt.Errorf("Combine errors error: %s", formatError.Error())
+		}
+		errMsgs = append(errMsgs, formattedErrMsg)
+	}
+	combinedErrMsg := strings.Join(errMsgs, "\n")
+	return errors.New(combinedErrMsg)
 }

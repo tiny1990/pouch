@@ -31,7 +31,7 @@ func (suite *PouchImagesSuite) SetUpSuite(c *check.C) {
 
 	environment.PruneAllContainers(apiClient)
 
-	command.PouchRun("pull", busyboxImage).Assert(c, icmd.Success)
+	PullImage(c, busyboxImage)
 }
 
 // TestImagesWorks tests "pouch image" work.
@@ -53,7 +53,8 @@ func (suite *PouchImagesSuite) TestImagesWorks(c *check.C) {
 		resQuiet := command.PouchRun("images", "--quiet").Assert(c, icmd.Success)
 
 		c.Assert(resQ.Combined(), check.Equals, resQuiet.Combined())
-		c.Assert(strings.TrimSpace(resQ.Combined()), check.Equals, utils.TruncateID(image.ID))
+		err := util.PartialEqual(strings.TrimSpace(resQ.Combined()), utils.TruncateID(image.ID))
+		c.Assert(err, check.IsNil)
 	}
 
 	// with --digest
